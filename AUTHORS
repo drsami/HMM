@@ -1,0 +1,15 @@
+AUTHORS
+
+Copyright (C) 2010, Brigham & Women's Hospital
+Author: Brendan Hickey
+All rights reserved.
+
+kseq.h
+Copyright (C) 2008, Genome Research Ltd (GRL).
+Author: Heng Li
+Used under the MIT license
+
+MersenneTwister.h
+Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura
+Copyright (C) 2000 - 2009, Richard J. Wagner
+Used under the BSD license
