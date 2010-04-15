@@ -43,9 +43,6 @@ distribution.
 #define DEBUG
 #endif
 
-// Compiled with STL support
-#define TIXML_USE_STL
-
 #ifdef TIXML_USE_STL
 	#include <string>
  	#include <iostream>
