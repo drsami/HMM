@@ -35,12 +35,13 @@ class HMM {
     public:
         HMM();
         ~HMM();
+        HMM(char*);
         char* generate(int);
         std::list< int > viterbi(char*, char*);
     private:
         int _startState;
-        State getState(int x);
-        std::vector< State > _states;
+        State* getState(int x);
+        std::vector< State* > _states;
 
 };
 
@@ -49,9 +50,9 @@ class Behavior {
     public:
         Behavior(){};
         ~Behavior(){};
-        virtual T emit(double) { return (T) NULL; };
+        virtual T emit(double){ return (T) -1; }
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&){ return; }
-        virtual double loglikelihood(T, int){ return 0.0; };
+        virtual double loglikelihood(T, int){ return 1.0; }
 };
 
 // MonoBehavior
@@ -62,9 +63,9 @@ class MonoBehavior : public Behavior<T> {
     public:
         MonoBehavior(T);
         ~MonoBehavior();
-        T emit(double);
-        void enqueueEmissions(T, int, int, std::queue< edge >&);
-        double loglikelihood(T, int);
+        virtual T emit(double);
+        virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
+        virtual double loglikelihood(T, int);
     private:
         T _emission;
 };
@@ -75,9 +76,9 @@ template <class T>
 class PolyBehavior : public Behavior<T> {
     public:
         PolyBehavior(std::list<std::pair<double, T> >);
-        T emit(double);
-        void enqueueEmissions(T, int, int, std::queue< edge >&);
-        double loglikelihood(T, int);
+        virtual T emit(double);
+        virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
+        virtual double loglikelihood(T, int);
    private:
         std::map<double, T> _emissions;    
         std::list< std::pair<double, T> > _likelihoods;
@@ -86,8 +87,10 @@ class PolyBehavior : public Behavior<T> {
 class State {
     public:
         State();
+        State(int, char, int);
         State(std::list<std::pair<double, char> >, std::list<std::pair<double, int> >);
         ~State();
+        int getId(){ return _id; };
         int transition(double);
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
@@ -95,22 +98,23 @@ class State {
         double emissionProbability(char, int);
         double transitionProbability(int);
         void enqueueTransitions(int, std::queue< edge >&);
-    private:
+    protected:
         int _id;
-        Behavior<int> _transition;
-        Behavior<char> _emission;
+        Behavior<int> *_transition;
+        Behavior<char> *_emission;
 };
 
 class SilentState : public State {
     public:
-        SilentState();
+        SilentState(){};
+        SilentState(int, int);
         SilentState(std::list< std::pair<double, int> >);
         bool hasEmission(){ return false; }
 };
 
 class AcceptingState : public SilentState {
     public:
-        AcceptingState();
-        ~AcceptingState();
+        AcceptingState(int id){ _id = id; };
+        ~AcceptingState(){};
         bool hasTransition(){ return false; }
 };

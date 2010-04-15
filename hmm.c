@@ -4,22 +4,41 @@
 using namespace std;
 
 // HMM
+HMM::HMM(char* sequence){
+
+    int len = strlen(sequence);
+    _startState = 0;
+    _states.reserve(len+2);
+    _states.push_back(new SilentState(0, 1));
+
+    for(int ii = 0; ii < len; ++ii){
+       State *s = new State(ii + 1, sequence[ii],ii+2);         
+       _states.push_back(s);
+    }
+
+    _states.push_back(new AcceptingState(len+1));
+
+
+    vector< State >::iterator s_itr;
+}
+
+HMM::~HMM(){ }
 
 char* HMM::generate(int request_length){
     
     char* res = (char*) calloc(request_length + 1, sizeof(char));
     //I don't need to set the null terminator on res, calloc does that for me.
 
-    State s = getState(_startState);
+    State* s = getState(_startState);
     double p = 0.0;
     int ii = 0;
     while( ii < request_length ){
-        if( s.hasEmission() ){
-           res[ii] = s.emit(p);
+        if( s->hasEmission() ){
+           res[ii] = s->emit(p);
            ii++;
         }
-        if( s.hasTransition() ){
-            s = getState(s.transition(p));
+        if( s->hasTransition() ){
+            s = getState(s->transition(p));
         } else {
             //If we don't have a valid transition, die
             return res;
@@ -28,8 +47,8 @@ char* HMM::generate(int request_length){
     return res;
 }
 
-State HMM::getState(int id){
-    if( id > 0 && _states.size() ){
+State* HMM::getState(int id){
+    if( id >= 0 && id < _states.size() ){
         return _states[id];
     }
 }
@@ -60,9 +79,9 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
     vmatrix[_startState][0].emission = -1;
     vmatrix[_startState][0].best_score = 0.0;
 
-    State start = getState(_startState);
-    if( start.hasEmission() ){
-       vmatrix[_startState][0].best_score = start.emissionProbability(emissions[0],qualities[0]); 
+    State* start = getState(_startState);
+    if( start->hasEmission() ){
+       vmatrix[_startState][0].best_score = start->emissionProbability(emissions[0],qualities[0]); 
     }
 
     searchQueue.push(startEdge);
@@ -72,9 +91,9 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
         // I can preserve my runtime guarantees because I traverse each edge only once
         edge e = searchQueue.front();
         searchQueue.pop();
-        State s = getState(e.in_state);
+        State* s = getState(e.in_state);
 
-        s.enqueueTransitions(e.out_state, searchQueue);
+        s->enqueueTransitions(e.out_state, searchQueue);
 
         double prb = 0.0;
 
@@ -87,8 +106,8 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
         prb += e.cost;
 
         // Add the emission cost
-        if( s.hasEmission() ){
-            prb += s.emissionProbability(emissions[e.in_emit],qualities[e.in_emit]);
+        if( s->hasEmission() ){
+            prb += s->emissionProbability(emissions[e.in_emit],qualities[e.in_emit]);
         }
 
         if( vmatrix[e.in_state][e.in_emit].best_score < prb ){
@@ -134,42 +153,46 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
 // HMM State
 State::State(){};
 
+State::State(int id, char emission, int transition){
+    _id = id;
+    _emission = new MonoBehavior<char>(emission);
+    _transition = new MonoBehavior<int>(transition);
+}
+
 State::State(list<pair<double, char> > emission, list<pair<double, int> > transitions){
     
     if( emission.size() == 1 ){
-        MonoBehavior<char> mem(emission.front().second);
-        _emission = mem;
+        _emission = new MonoBehavior<char>(emission.front().second);
     } else {
-        PolyBehavior<char> pem(emission);
-        _emission = pem;
+        _emission = new PolyBehavior<char>(emission);
     }
 
     if( transitions.size() == 1 ){
-        MonoBehavior<int> mtn(transitions.front().second);
-        _transition = mtn;
+        _transition = new MonoBehavior<int>(transitions.front().second);
     } else {
-      
-        PolyBehavior<int> ptn(transitions);
-        _transition = ptn;
+        _transition = new PolyBehavior<int>(transitions);
     }
 }
 
-State::~State() { }
+State::~State() { 
+    // delete _emission;
+    // delete _transition;
+}
 
 int State::transition(double n){
-   _transition.emit(n); 
+   _transition->emit(n); 
 }
 
 double State::transitionProbability(int state){
-    _transition.loglikelihood(state, 20);
+    _transition->loglikelihood(state, 20);
 }
 
 char State::emit(double n){
-    _emission.emit(n);
+    _emission->emit(n);
 }
 
 double State::emissionProbability(char em, int qual=0){
-    _emission.loglikelihood(em, qual);
+    _emission->loglikelihood(em, qual);
 }
 
 void State::enqueueTransitions(int em, queue< edge > &sq){
@@ -179,11 +202,23 @@ void State::enqueueTransitions(int em, queue< edge > &sq){
         out_emit += 1;
     }
 
-    _transition.enqueueEmissions(_id, em, out_emit, sq);
+    _transition->enqueueEmissions(_id, em, out_emit, sq);
     return;
 }
 
 // HMM Behavior
+//      Base class
+/*
+template <class T>
+T Behavior<T>::emit(double p){ return (T) -1; };
+
+template <class T>
+void Behavior<T>::enqueueEmissions(T a, int b, int c, std::queue< edge > &d){ return; }
+
+template <class T>
+double Behavior<T>::loglikelihood(T a, int b){ return 0.0; };
+*/
+
 //      MonoBehavior
 template <class T>
 MonoBehavior<T>::MonoBehavior(T emission){
@@ -264,7 +299,17 @@ void PolyBehavior<T>::enqueueEmissions(T out_id, int out_em, int in_em, queue< e
             sq.push(e);
         }
     return;
+}
+
+SilentState::SilentState(int id, int successor){
+    _id = id;
+    _transition = new MonoBehavior<int>(successor);  
+}
+
+int main(){
 
 
-
+    HMM h("ATCGATCGATCG");
+    printf("%s\n", h.generate(1000));
+    return 0;
 }
