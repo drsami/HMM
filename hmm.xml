@@ -1,0 +1,11 @@
+<HMM Start="0">
+    <State id="0">
+      <transitions monomorphic="0"></transitions>
+      <emissions>
+        <emission val="A" prob="0.5" />
+        <emission val="T" prob="0.16" />
+        <emission val="C" prob="0.16" />
+        <emission val="G" prob="0.18" />
+      </emissions>
+    </State>
+</HMM>
