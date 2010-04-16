@@ -1,6 +1,8 @@
 #include "kseq.h"
 #include "qual.h"
+
 #include "tinyxml.h"
+#include "MersenneTwister.h"
 
 #include <float.h>
 #include <math.h>
@@ -45,7 +47,7 @@ class HMM {
         int _startState;
         State* getState(int x);
         std::vector< State* > _states;
-
+        MTRand _rng;
 };
 
 template <class T>

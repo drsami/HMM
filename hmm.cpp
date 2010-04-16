@@ -37,7 +37,6 @@ HMM::HMM(const char* fn){
         _states[s->getId()] = s;
     }
 
-    printf("%s\n", generate(50));
 }
 
 /*
@@ -67,15 +66,20 @@ char* HMM::generate(int request_length){
     //I don't need to set the null terminator on res, calloc does that for me.
 
     State* s = getState(_startState);
-    double p = 0.0;
+    double ep = 0.0;
+    double tp = 0.0;
     int ii = 0;
     while( ii < request_length ){
+        ep = _rng.rand();
+        tp = _rng.rand();
+        
         if( s->hasEmission() ){
-            res[ii] = s->emit(p, ii);
+            res[ii] = s->emit(ep, ii);
             ii++;
         }
+
         if( s->hasTransition() ){
-            s = getState(s->transition(p, ii));
+            s = getState(s->transition(tp, ii));
         } else {
             //If we don't have a valid transition, die
             return res;
@@ -279,18 +283,6 @@ void State::enqueueTransitions(int em, queue< edge > &sq){
 }
 
 // HMM Behavior
-//      Base class
-/*
-   template <class T>
-   T Behavior<T>::emit(double p){ return (T) -1; };
-
-   template <class T>
-   void Behavior<T>::enqueueEmissions(T a, int b, int c, std::queue< edge > &d){ return; }
-
-   template <class T>
-   double Behavior<T>::loglikelihood(T a, int b){ return 0.0; };
- */
-
 //      MonoBehavior
 template <class T>
 MonoBehavior<T>::MonoBehavior(T emission){
@@ -334,8 +326,14 @@ PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
     while( e ){
 
         e->QueryDoubleAttribute("prob", &p);
-        val = (T) (e->Attribute("val"))[0];
-
+        
+        // TODO This is kludgey
+        if( e->Attribute("nval") ){
+            val = (T) atoi(e->Attribute("nval"));
+        } else {
+            val = (T) e->Attribute("val")[0];
+        }
+        
         tally += p;
 
         e = e->NextSiblingElement();
@@ -419,6 +417,11 @@ int main(){
 
 
     HMM h("hmm.xml");
-    //    printf("%s\n", h.generate(1000));
-    //    return 0;
+    
+    for(int ii = 0; ii < 10000; ii++ ){
+        char* n = h.generate(100000);
+        free(n);
+    }
+
+    return 0;
 }
