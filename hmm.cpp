@@ -31,11 +31,13 @@ HMM::HMM(const char* fn){
         }
 
         if( (int) _states.size() <= s->getId() ){
-            _states.resize(s->getId());
+            _states.resize(s->getId()+1);
         }
 
         _states[s->getId()] = s;
     }
+
+    printf("%s\n", generate(50));
 }
 
 /*
@@ -69,11 +71,11 @@ char* HMM::generate(int request_length){
     int ii = 0;
     while( ii < request_length ){
         if( s->hasEmission() ){
-            res[ii] = s->emit(p);
+            res[ii] = s->emit(p, ii);
             ii++;
         }
         if( s->hasTransition() ){
-            s = getState(s->transition(p));
+            s = getState(s->transition(p, ii));
         } else {
             //If we don't have a valid transition, die
             return res;
@@ -119,7 +121,7 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
 
     State* start = getState(_startState);
     if( start->hasEmission() ){
-        vmatrix[_startState][0].best_score = start->emissionProbability(emissions[0],qualities[0]); 
+        vmatrix[_startState][0].best_score = start->emissionProbability(emissions[0],qualities[0], 0); 
     }
 
     searchQueue.push(startEdge);
@@ -145,7 +147,7 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
 
         // Add the emission cost
         if( s->hasEmission() ){
-            prb += s->emissionProbability(emissions[e.in_emit],qualities[e.in_emit]);
+            prb += s->emissionProbability(emissions[e.in_emit],qualities[e.in_emit], e.in_emit);
         }
 
         if( vmatrix[e.in_state][e.in_emit].best_score < prb ){
@@ -193,28 +195,33 @@ State::State(){};
 
 State::State(TiXmlElement* stateElem){
 
+    stateElem->Attribute("id", &_id);
+
+    int ii = 0;
     for( TiXmlElement* e = stateElem->FirstChildElement(); e; e = e->NextSiblingElement() ){
-        if( strcmp("transitions", e->Value()) ){
+
+        if( 0 == strcmp("transitions", e->Value()) ){
             int trans;
             if( e->Attribute("monomorphic", &trans) ){
                 _transition = new MonoBehavior<int>(trans);
             } else {
-                _transition = new PolyBehavior<int>();
+                _transition = new PolyBehavior<int>(e->FirstChildElement());
             }
-        } else if( strcmp("emissions", e->Value()) ){
-
-            int emit;
-            if( e->Attribute("monomorphic", &emit) ){
-                _emission = new MonoBehavior<char>((char) emit);
+        } else if( 0 == strcmp("emissions", e->Value()) ){
+            char emit;
+            if( e->Attribute("monomorphic") ){
+                emit = e->Attribute("monomorphic")[0];
+                _emission = new MonoBehavior<char>(emit);
             } else {
-                _emission = new PolyBehavior<char>();
+                _emission = new PolyBehavior<char>(e->FirstChildElement());
             }
         } else {
 
             fprintf(stderr, "Got unexpected node type '%s'\n", e->Value());
 
         }
-        
+
+        ++ii;
     }
 }
 
@@ -244,20 +251,20 @@ State::~State() {
     // delete _transition;
 }
 
-int State::transition(double n){
-    return _transition->emit(n); 
+int State::transition(double p, int n){
+    return _transition->emit(p, n); 
 }
 
-double State::transitionProbability(int state){
-    return _transition->loglikelihood(state, 20);
+double State::transitionProbability(int state, int n){
+    return _transition->loglikelihood(state, 20, n);
 }
 
-char State::emit(double n){
-    return _emission->emit(n);
+char State::emit(double p, int n){
+    return _emission->emit(p, n);
 }
 
-double State::emissionProbability(char em, int qual=0){
-    return _emission->loglikelihood(em, qual);
+double State::emissionProbability(char em, int n, int qual=0){
+    return _emission->loglikelihood(em, n, qual);
 }
 
 void State::enqueueTransitions(int em, queue< edge > &sq){
@@ -294,10 +301,10 @@ template <class T>
 MonoBehavior<T>::~MonoBehavior(){ }
 
 template <class T>
-T MonoBehavior<T>::emit(double n){ return _emission; }
+T MonoBehavior<T>::emit(double n, int position){ return _emission; }
 
 template <class T>
-double MonoBehavior<T>::loglikelihood(T emit, int qual=20){
+double MonoBehavior<T>::loglikelihood(T emit, int n, int qual=20){
     if( emit == _emission ){
         return LOGQUALITY(qual);
     } else {
@@ -319,8 +326,27 @@ void MonoBehavior<T>::enqueueEmissions(T out_id, int out_em, int in_em, queue< e
 
 //      PolyBehavior
 template <class T>
-PolyBehavior<T>::PolyBehavior(){
+PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
+    double tally = 0.0;
+    double p;
+    T val;
 
+    while( e ){
+
+        e->QueryDoubleAttribute("prob", &p);
+        val = (T) (e->Attribute("val"))[0];
+
+        tally += p;
+
+        e = e->NextSiblingElement();
+        if( !e ){
+            tally = 1.0;
+        }
+        _emissions.insert(pair<double, T>(tally, (T) val));
+
+        //TODO Is this actually what I want?
+        _likelihoods.push_back(pair<double, T>(log(p), (T) val));
+    }
 }
 
 
@@ -346,12 +372,13 @@ PolyBehavior<T>::PolyBehavior(list<pair<double, T> > emissions){
 }
 
 template <class T>
-T PolyBehavior<T>::emit(double p){
-    return (*_emissions.upper_bound(p)).second;
+T PolyBehavior<T>::emit(double p, int position){
+    return (*_emissions.lower_bound(p)).second;
 }
 
 template <class T>
-double PolyBehavior<T>::loglikelihood(T emit, int qual=20){
+double PolyBehavior<T>::loglikelihood(T emit, int position, int qual=20){
+    raise(SIGSEGV);
     return 0.0;
 }
 

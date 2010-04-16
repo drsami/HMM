@@ -53,9 +53,9 @@ class Behavior {
     public:
         Behavior(){};
         ~Behavior(){};
-        virtual T emit(double){ return (T) -1; }
+        virtual T emit(double, int){ return (T) -1; }
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&){ return; }
-        virtual double loglikelihood(T, int){ return 1.0; }
+        virtual double loglikelihood(T, int, int){ return 1.0; }
 };
 
 // MonoBehavior
@@ -66,9 +66,9 @@ class MonoBehavior : public Behavior<T> {
     public:
         MonoBehavior(T);
         ~MonoBehavior();
-        virtual T emit(double);
+        virtual T emit(double, int);
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
-        virtual double loglikelihood(T, int);
+        virtual double loglikelihood(T, int, int);
     private:
         T _emission;
 };
@@ -78,10 +78,11 @@ class MonoBehavior : public Behavior<T> {
 template <class T>
 class PolyBehavior : public Behavior<T> {
     public:
+        PolyBehavior(TiXmlElement*);
         PolyBehavior(std::list<std::pair<double, T> >);
-        virtual T emit(double);
+        virtual T emit(double, int);
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
-        virtual double loglikelihood(T, int);
+        virtual double loglikelihood(T, int, int);
    private:
         std::map<double, T> _emissions;    
         std::list< std::pair<double, T> > _likelihoods;
@@ -96,12 +97,12 @@ class State {
         ~State();
         int getId(){ return _id; };
         std::string getLabel(){ return _label; }
-        int transition(double);
+        int transition(double, int);
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
-        char emit(double);
-        double emissionProbability(char, int);
-        double transitionProbability(int);
+        char emit(double, int);
+        double emissionProbability(char, int, int);
+        double transitionProbability(int, int);
         void enqueueTransitions(int, std::queue< edge >&);
     protected:
         int _id;
