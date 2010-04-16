@@ -1,8 +1,10 @@
 #include "kseq.h"
 #include "qual.h"
+#include "tinyxml.h"
 
 #include <float.h>
 #include <math.h>
+#include <signal.h>
 
 #include <list>
 #include <map>
@@ -35,6 +37,7 @@ class HMM {
     public:
         HMM();
         ~HMM();
+        HMM(const char*);
         HMM(char*);
         char* generate(int);
         std::list< int > viterbi(char*, char*);
@@ -87,10 +90,12 @@ class PolyBehavior : public Behavior<T> {
 class State {
     public:
         State();
+        State(TiXmlElement*);
         State(int, char, int);
         State(std::list<std::pair<double, char> >, std::list<std::pair<double, int> >);
         ~State();
         int getId(){ return _id; };
+        std::string getLabel(){ return _label; }
         int transition(double);
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
@@ -100,6 +105,7 @@ class State {
         void enqueueTransitions(int, std::queue< edge >&);
     protected:
         int _id;
+        std::string _label;
         Behavior<int> *_transition;
         Behavior<char> *_emission;
 };
@@ -107,6 +113,7 @@ class State {
 class SilentState : public State {
     public:
         SilentState(){};
+        SilentState(TiXmlElement*);
         SilentState(int, int);
         SilentState(std::list< std::pair<double, int> >);
         bool hasEmission(){ return false; }
@@ -115,6 +122,7 @@ class SilentState : public State {
 class AcceptingState : public SilentState {
     public:
         AcceptingState(int id){ _id = id; };
+        AcceptingState(TiXmlElement*);
         ~AcceptingState(){};
         bool hasTransition(){ return false; }
 };
