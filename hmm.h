@@ -55,9 +55,9 @@ class Behavior {
     public:
         Behavior(){};
         ~Behavior(){};
-        virtual T emit(double, int){ return (T) -1; }
+        virtual T emit(double){ return (T) -1; }
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&){ return; }
-        virtual double loglikelihood(T, int, int){ return 1.0; }
+        virtual double loglikelihood(T, int=INT_MIN){ return 1.0; }
 };
 
 // MonoBehavior
@@ -66,13 +66,14 @@ class Behavior {
 template <class T>
 class MonoBehavior : public Behavior<T> {
     public:
-        MonoBehavior(T);
+        MonoBehavior(T, double = 0.0);
         ~MonoBehavior();
-        virtual T emit(double, int);
+        virtual T emit(double);
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
-        virtual double loglikelihood(T, int, int);
+        virtual double loglikelihood(T, int=INT_MIN);
     private:
         T _emission;
+        double _mutr;
 };
 
 // PolyBehavior
@@ -82,12 +83,13 @@ class PolyBehavior : public Behavior<T> {
     public:
         PolyBehavior(TiXmlElement*);
         PolyBehavior(std::list<std::pair<double, T> >);
-        virtual T emit(double, int);
+        virtual T emit(double);
         virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
-        virtual double loglikelihood(T, int, int);
+        virtual double loglikelihood(T, int=INT_MIN);
    private:
-        std::map<double, T> _emissions;    
-        std::list< std::pair<double, T> > _likelihoods;
+        std::map<double, T> _emissions; 
+        std::map<T, double> _likelihoods;
+        double _density;
 };
 
 class State {
@@ -99,12 +101,12 @@ class State {
         ~State();
         int getId(){ return _id; };
         std::string getLabel(){ return _label; }
-        int transition(double, int);
+        int transition(double);
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
-        char emit(double, int);
-        double emissionProbability(char, int, int);
-        double transitionProbability(int, int);
+        char emit(double);
+        double emissionProbability(char, int);
+        double transitionProbability(int);
         void enqueueTransitions(int, std::queue< edge >&);
     protected:
         int _id;

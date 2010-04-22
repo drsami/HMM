@@ -39,25 +39,6 @@ HMM::HMM(const char* fn){
 
 }
 
-/*
-   HMM::HMM(char* sequence){
-
-   int len = strlen(sequence);
-   _startState = 0;
-   _states.reserve(len+2);
-   _states.push_back(new SilentState(0, 1));
-
-   for(int ii = 0; ii < len; ++ii){
-   State *s = new State(ii + 1, sequence[ii],ii+2);         
-   _states.push_back(s);
-   }
-
-   _states.push_back(new AcceptingState(len+1));
-
-
-   vector< State >::iterator s_itr;
-   }
- */
 HMM::~HMM(){ }
 
 char* HMM::generate(int request_length){
@@ -74,12 +55,12 @@ char* HMM::generate(int request_length){
         tp = _rng.rand();
         
         if( s->hasEmission() ){
-            res[ii] = s->emit(ep, ii);
+            res[ii] = s->emit(ep);
             ii++;
         }
 
         if( s->hasTransition() ){
-            s = getState(s->transition(tp, ii));
+            s = getState(s->transition(tp));
         } else {
             //If we don't have a valid transition, die
             return res;
@@ -125,7 +106,7 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
 
     State* start = getState(_startState);
     if( start->hasEmission() ){
-        vmatrix[_startState][0].best_score = start->emissionProbability(emissions[0],qualities[0], 0); 
+        vmatrix[_startState][0].best_score = start->emissionProbability(emissions[0],qualities[0]); 
     }
 
     searchQueue.push(startEdge);
@@ -151,7 +132,7 @@ list< int > HMM::viterbi( char* emissions, char* qualities ){
 
         // Add the emission cost
         if( s->hasEmission() ){
-            prb += s->emissionProbability(emissions[e.in_emit],qualities[e.in_emit], e.in_emit);
+            prb += s->emissionProbability(emissions[e.in_emit],qualities[e.in_emit]);
         }
 
         if( vmatrix[e.in_state][e.in_emit].best_score < prb ){
@@ -255,20 +236,20 @@ State::~State() {
     // delete _transition;
 }
 
-int State::transition(double p, int n){
-    return _transition->emit(p, n); 
+int State::transition(double p){
+    return _transition->emit(p); 
 }
 
-double State::transitionProbability(int state, int n){
-    return _transition->loglikelihood(state, 20, n);
+double State::transitionProbability(int state){
+    return _transition->loglikelihood(state);
 }
 
-char State::emit(double p, int n){
-    return _emission->emit(p, n);
+char State::emit(double p){
+    return _emission->emit(p);
 }
 
-double State::emissionProbability(char em, int n, int qual=0){
-    return _emission->loglikelihood(em, n, qual);
+double State::emissionProbability(char em, int qual=INT_MIN){
+    return _emission->loglikelihood(em, qual);
 }
 
 void State::enqueueTransitions(int em, queue< edge > &sq){
@@ -285,22 +266,45 @@ void State::enqueueTransitions(int em, queue< edge > &sq){
 // HMM Behavior
 //      MonoBehavior
 template <class T>
-MonoBehavior<T>::MonoBehavior(T emission){
+MonoBehavior<T>::MonoBehavior(T emission, double errorRate){
     _emission = emission;
+    _mutr = errorRate;
 }
 
 template <class T>
 MonoBehavior<T>::~MonoBehavior(){ }
 
 template <class T>
-T MonoBehavior<T>::emit(double n, int position){ return _emission; }
+T MonoBehavior<T>::emit(double n){ return _emission; }
 
 template <class T>
-double MonoBehavior<T>::loglikelihood(T emit, int n, int qual=20){
-    if( emit == _emission ){
-        return LOGQUALITY(qual);
+double MonoBehavior<T>::loglikelihood(T emit, int qual){
+    // err is a measure of sequencing error
+    // _mutr measures mutational rate
+    double err = 0.0;
+
+    //TODO What is the correct behavior here?
+    // We haven't been given quality scores.
+    if( INT_MIN != qual ){
+        err = QUAL2ERROR(qual);
     } else {
-        return 0.0; // Return error probability here
+        err = DBL_EPSILON;
+    }
+
+    if( emit == _emission ){
+        if( INT_MIN != qual ){
+            err = QUAL2LL(qual);
+        } else {
+            err = 0.0;
+        }
+        return (log(1.0 - _mutr) + err);
+
+    } else {
+        double e = _mutr * (1 - err)
+                 + (1 - _mutr) * err
+                 + _mutr * err;
+
+        return log(e);
     }
 }
 
@@ -340,10 +344,10 @@ PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
         if( !e ){
             tally = 1.0;
         }
-        _emissions.insert(pair<double, T>(tally, (T) val));
+        _emissions.insert(pair<double, T>(tally, val));
 
         //TODO Is this actually what I want?
-        _likelihoods.push_back(pair<double, T>(log(p), (T) val));
+        _likelihoods.insert(pair<T, double>(val, log(p)));
     }
 }
 
@@ -362,22 +366,35 @@ PolyBehavior<T>::PolyBehavior(list<pair<double, T> > emissions){
             p = 1.0;
         }
 
-        pair<double, T> lk(log((*e_itr).first), val);
+        pair<T, double> lk(val, log((*e_itr).first));
         pair<double, T> pr(p, val);
-        _likelihoods.push_back(lk);
+        _likelihoods.insert(lk);
         _emissions.insert(pr);
     }
 }
 
 template <class T>
-T PolyBehavior<T>::emit(double p, int position){
+T PolyBehavior<T>::emit(double p){
     return (*_emissions.lower_bound(p)).second;
 }
 
 template <class T>
-double PolyBehavior<T>::loglikelihood(T emit, int position, int qual=20){
-    raise(SIGSEGV);
-    return 0.0;
+double PolyBehavior<T>::loglikelihood(T emit, int qual){
+    typename map<T, double>::iterator itr;
+
+    itr = _likelihoods.find(emit);
+
+    if( itr != _likelihoods.end() ){
+        double p = (*itr).second;
+        return log(p) + LOGERROR(qual);
+    } else {
+        // The probability of something else...
+        double p = 1.0 - _density; // innate error probability
+        double err = QUAL2ERROR(qual); // sequencing error rate
+        return log((1 - p) * err + p * (1 - err) + (1 - p) * (1 - err));
+
+    }
+
 }
 
 template <class T>
@@ -387,11 +404,11 @@ void PolyBehavior<T>::enqueueEmissions(T out_id, int out_em, int in_em, queue< e
     e.out_emit = out_em;
     e.in_emit = in_em;
 
-    typename list< pair<double, T> >::iterator lk_itr;
+    typename map<T, double>::iterator lk_itr;
 
     for( lk_itr = _likelihoods.begin(); lk_itr != _likelihoods.end(); lk_itr++ ){
-        e.cost = (*lk_itr).first; // deterministic edge, no traversal cost 
-        e.in_state = (int) (*lk_itr).second;
+        e.cost = (*lk_itr).second; // deterministic edge, no traversal cost 
+        e.in_state = (int) (*lk_itr).first;
         sq.push(e);
     }
     return;
@@ -417,11 +434,11 @@ int main(){
 
 
     HMM h("hmm.xml");
-    
+    /*
     for(int ii = 0; ii < 10000; ii++ ){
         char* n = h.generate(100000);
         free(n);
     }
-
+*/
     return 0;
 }
