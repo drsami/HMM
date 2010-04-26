@@ -15,25 +15,8 @@
 #include <vector>
 
 class HMM;
+class VState;
 class State;
-class Transitions;
-class Emissions;
-
-typedef struct {
-
-    int predecessor;
-    int emission;
-    double best_score;
-
-} vcell;
-
-typedef struct {
-    int out_state;
-    int out_emit;
-    int in_state;
-    int in_emit;
-    double cost;
-} edge;
 
 class HMM {
     public:
@@ -44,9 +27,9 @@ class HMM {
         char* generate(int);
         std::list< int > viterbi(char*, char*);
     private:
-        int _startState;
-        State* getState(int x);
-        std::vector< State* > _states;
+        void setTransitions();
+        VState* _startState;
+        std::vector< VState* > _states;
         MTRand _rng;
 };
 
@@ -55,9 +38,10 @@ class Behavior {
     public:
         Behavior(){};
         ~Behavior(){};
-        virtual T emit(double){ return (T) -1; }
-        virtual void enqueueEmissions(T, int, int, std::queue< edge >&){ return; }
+        virtual T emit(double, int = 0){ return (T) -1; }
         virtual double loglikelihood(T, int=INT_MIN){ return 1.0; }
+        static double loglikelihood(bool, double=DBL_EPSILON, int=INT_MIN);
+        virtual void relabelTransition(std::vector<T>&){ return; };
 };
 
 // MonoBehavior
@@ -68,9 +52,9 @@ class MonoBehavior : public Behavior<T> {
     public:
         MonoBehavior(T, double = 0.0);
         ~MonoBehavior();
-        virtual T emit(double);
-        virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
+        virtual T emit(double, int = 0);
         virtual double loglikelihood(T, int=INT_MIN);
+        void relabelTransition(std::vector<T>&);
     private:
         T _emission;
         double _mutr;
@@ -82,17 +66,41 @@ template <class T>
 class PolyBehavior : public Behavior<T> {
     public:
         PolyBehavior(TiXmlElement*);
-        PolyBehavior(std::list<std::pair<double, T> >);
-        virtual T emit(double);
-        virtual void enqueueEmissions(T, int, int, std::queue< edge >&);
+        virtual T emit(double, int = 0);
         virtual double loglikelihood(T, int=INT_MIN);
+        void relabelTransition(std::vector<T>&);
    private:
         std::map<double, T> _emissions; 
         std::map<T, double> _likelihoods;
         double _density;
 };
 
-class State {
+// IndexedBehavior
+template <class T>
+class IndexedBehavior : public Behavior<T> {
+    public:
+        IndexedBehavior(std::vector<T>, double = 0.0);
+        ~IndexedBehavior();
+        virtual T emit(double, int = 0);
+        virtual double loglikelihood(T, int, int=0);
+        int size(){ return _emissions.size(); }
+    private:
+        std::vector<T> _emissions;
+        double _mutr;
+};
+
+class VState {
+    friend class HMM;
+    public:
+        virtual char emit(double) = 0;
+        virtual VState* transition(double) = 0;
+        virtual bool hasTransition() = 0;
+        virtual bool hasEmission() = 0;
+    protected:
+        virtual void relabelTransition(std::vector< VState* >&) = 0;
+};
+
+class State : public VState {
     public:
         State();
         State(TiXmlElement*);
@@ -101,18 +109,45 @@ class State {
         ~State();
         int getId(){ return _id; };
         std::string getLabel(){ return _label; }
-        int transition(double);
+        virtual VState* transition(double);
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
         char emit(double);
         double emissionProbability(char, int);
         double transitionProbability(int);
-        void enqueueTransitions(int, std::queue< edge >&);
     protected:
         int _id;
         std::string _label;
-        Behavior<int> *_transition;
+        Behavior<VState*> *_transition;
         Behavior<char> *_emission;
+        bool _positionReset;
+        void relabelTransition(std::vector< VState* >&);
+        virtual bool resetPosition(int=0){ return _positionReset; }
+};
+
+class IndexedState : public VState {
+    public:
+        IndexedState();
+        IndexedState(TiXmlElement*);
+        ~IndexedState();
+        VState* transition(double, int=0);
+        char emit(double, int);
+    private:
+        IndexedBehavior<char> *_emissions;
+        Behavior<VState*> *_internalTransition;
+        Behavior<VState*> *_terminalTransition;
+        void relabelTransition(std::vector< VState* >&);
+        bool resetPosition(int pos){ return pos >= _emissions->size(); }
+};
+
+class EncapsulatingState : public VState {
+    public:
+        VState* transition(double p){ return _state->transition(p, _index); }
+        char emit(double p){ return _state->emit(p, _index); }
+    private:
+        void relabelTransition(std::vector< VState* >&) { return; };
+        int _index;
+        IndexedState *_state;
 };
 
 class SilentState : public State {
