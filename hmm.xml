@@ -1,30 +1,51 @@
 <HMM Start="0">
-    <State id="0">
-      <transitions>
-        <emission nval="0" prob="0.9" />
-        <emission nval="1" prob="0.1" />
-      </transitions>
-      <emissions>
-        <emission val="1" prob="0.16666" />
-        <emission val="2" prob="0.16666" />
-        <emission val="3" prob="0.16666" />
-        <emission val="4" prob="0.16666" />
-        <emission val="5" prob="0.16666" />
-        <emission val="6" prob="0.16670" />
-     </emissions>
+    <State id="0" type="indexed" label="IGHV1-24*01">
+     <emissions str="CAGGTCCAGCTGGTACAGTCTGGGGCTGAGGTGAAGAAGCCTGGGGCCTCAGTGAAGGTCTCCTGCAAGGTTTCCGGATACACCCTCACTGAATTATCCATGCACTGGGTGCGACAGGCTCCTGGAAAAGGGCTTGAGTGGATGGGAGGTTTTGATCCTGAAGATGGTGAAACAATCTACGCACAGAAGTTCCAGGGCAGAGTCACCATGACCGAGGACACATCTACAGACACAGCCTACATGGAGCTGAGCAGCCTGAGATCTGAGGACACGGCCGTGTATTACTGTGCAACAGA" />
+     <internalTransition>
+        <emission nval="1" prob="0.001" />
+        <emission nval="0" prob="0.999" />
+     </internalTransition>
+     <externalTransition monomorphic="0" />
     </State>
-    
-    <State id="1">
-    <transitions>
-        <emission nval="0" prob="0.3" />
-        <emission nval="1" prob="0.7" />
-    </transitions>
-    <emissions>
-        <emission val="1" prob="0.5" />
-        <emission val="2" prob="0.1" />
-        <emission val="3" prob="0.1" />
-        <emission val="4" prob="0.1" />
-        <emission val="5" prob="0.1" />
-        <emission val="6" prob="0.1" />
-    </emissions>
+
+    <State id="1" NoReset="true">
+        <emissions>
+            <emission val="W" prob="0.25" />
+            <emission val="X" prob="0.25" />
+            <emission val="Y" prob="0.25" />
+            <emission val="Z" prob="0.25" />
+        </emissions>
+        <transitions>
+            <emission nval="2" prob="0.99" />
+            <emission nval="0" prob="0.01" />
+        </transitions>
+    </State>
+
+    <State id="2" NoReset="true">
+        <emissions>
+            <emission val="W" prob="0.25" />
+            <emission val="X" prob="0.25" />
+            <emission val="Y" prob="0.25" />
+            <emission val="Z" prob="0.25" />
+        </emissions>
+        <transitions>
+            <emission nval="0" prob="0.01" />
+            <emission nval="3" prob="0.99" />
+        </transitions>
+    </State>
+
+    <State id="3" NoReset="true">
+        <emissions>
+            <emission val="W" prob="0.25" />
+            <emission val="X" prob="0.25" />
+            <emission val="Y" prob="0.25" />
+            <emission val="Z" prob="0.25" />
+        </emissions>
+        <transitions>
+            <emission nval="0" prob="0.99" />
+            <emission nval="1" prob="0.01" />
+        </transitions>
+    </State>
+
+
 </HMM>
