@@ -18,11 +18,13 @@ HMM::HMM(const char* fn){
 
     for( TiXmlElement* e = root->FirstChildElement(); e; e = e->NextSiblingElement() ){
 
-        State *s = 0;
+        VState *s = 0;
         const char* type = e->Attribute("type"); 
 
         if( type ){
-            if( 0 == strcmp(type, "silent") ){
+            if( 0 == strcmp(type, "indexed") ){
+                s = new IndexedState(e);
+            } else if( 0 == strcmp(type, "silent") ){
                 s = new SilentState(e);
             } else if( 0 == strcmp(type, "accepting") ){
                 s = new AcceptingState(e);
@@ -34,10 +36,11 @@ HMM::HMM(const char* fn){
         if( (int) _states.size() <= s->getId() ){
             _states.resize(s->getId()+1);
         }
-
+        printf("Inserting state %d\n", s->getId());
         _states[s->getId()] = s;
     }
 
+    printf("Have %d states...\n", _states.size());
     setTransitions();
     _startState = _states[start];
 }
@@ -45,12 +48,11 @@ HMM::HMM(const char* fn){
 void HMM::setTransitions(){
 
     vector< VState* >::iterator s_itr;
-
+    int ii = 0;
     for( s_itr = _states.begin(); s_itr != _states.end(); s_itr++ ){
+            printf("Relabel state %d: ", ii++);
             (*s_itr)->relabelTransition(_states);
     }
-
-
 }
 
 HMM::~HMM(){ }
@@ -64,17 +66,18 @@ char* HMM::generate(int request_length){
     double ep = 0.0;
     double tp = 0.0;
     int ii = 0;
+    int position = 0;
     while( ii < request_length ){
         ep = _rng.rand();
         tp = _rng.rand();
         
         if( s->hasEmission() ){
-            res[ii] = s->emit(ep);
+            res[ii] = s->emit(ep, position);
             ii++;
         }
 
         if( s->hasTransition() ){
-            s = s->transition(tp);
+            s = s->transition(tp, position);
         } else {
             //If we don't have a valid transition, die
             return res;
@@ -89,6 +92,14 @@ State::State(){};
 State::State(TiXmlElement* stateElem){
 
     stateElem->Attribute("id", &_id);
+
+    const char* reset = stateElem->Attribute("NoReset");
+
+    if( reset ){
+        _positionReset = false;
+    } else {
+        _positionReset = true;
+    }
 
     int ii = 0;
     for( TiXmlElement* e = stateElem->FirstChildElement(); e; e = e->NextSiblingElement() ){
@@ -129,7 +140,8 @@ State::~State() {
     // delete _transition;
 }
 
-VState* State::transition(double p){
+VState* State::transition(double p, int &n){
+    if( _positionReset ){ n = 0; }
     return _transition->emit(p); 
 }
 
@@ -137,7 +149,7 @@ double State::transitionProbability(int state){
     return _transition->loglikelihood(state);
 }
 
-char State::emit(double p){
+char State::emit(double p, int n){
     return _emission->emit(p);
 }
 
@@ -152,16 +164,47 @@ void State::relabelTransition(vector<VState*> &s){
 // IndexedState
 IndexedState::IndexedState(TiXmlElement *elem){
 
+    elem->Attribute("id", &_id);
+
+    int ii = 0;
+    for( TiXmlElement* e = elem->FirstChildElement(); e; e = e->NextSiblingElement() ){
+
+        if( 0 == strcmp("internalTransition", e->Value()) ){
+            int trans;
+            if( e->Attribute("monomorphic", &trans) ){
+                _internalTransition = new MonoBehavior<VState*>((VState*) trans);
+            } else {
+                _internalTransition = new PolyBehavior<VState*>(e->FirstChildElement());
+            }
+        } else if( 0 == strcmp("externalTransition", e->Value()) ){
+            int trans;
+            if( e->Attribute("monomorphic", &trans) ){
+                _terminalTransition = new MonoBehavior<VState*>((VState*) trans);
+            } else {
+                _terminalTransition = new PolyBehavior<VState*>(e->FirstChildElement());
+            }
+        } else if( 0 == strcmp("emissions", e->Value()) ){
+            _emissions = new IndexedBehavior<char>(e);
+        } else {
+            fprintf(stderr, "Got unexpected node type '%s'\n", e->Value());
+        }
+
+        ++ii;
+    }
+
 }
 
 char IndexedState::emit(double p, int index){
     return _emissions->emit(p, index);
 }
 
-VState* IndexedState::transition(double p, int index){
-    if( index < _emissions->size() ){
-       return _internalTransition->emit(p, index);
+VState* IndexedState::transition(double p, int &index){
+    if( index < _emissions->size() - 1 ){
+       VState* rtrn = _internalTransition->emit(p, index);
+       ++index;
+       return rtrn;
     } else {
+        index = 0;
         return _terminalTransition->emit(p, 0);
     }
 }
@@ -225,7 +268,9 @@ double MonoBehavior<T>::loglikelihood(T emit, int qual){
 
 template <class T>
 void MonoBehavior<T>::relabelTransition(vector<T> &s){
-    _emission = (T) s.front();
+    printf("%p -> ", (intptr_t)_emission);
+    _emission = (T) s[(intptr_t)_emission];
+    printf("%p\n", (intptr_t)_emission);
 }
 
 //      PolyBehavior
@@ -290,8 +335,8 @@ void PolyBehavior<T>::relabelTransition(vector<T> &s){
     typename map<double, T>::iterator e_itr;
 
     for( e_itr = _emissions.begin(); e_itr != _emissions.end(); e_itr++ ){
-        unsigned int index = (intptr_t) (*e_itr).second;
-        (*e_itr).second = (T) s[index];
+        int ptr = (intptr_t) (*e_itr).second;
+        e_itr->second = (T) s[ptr];
     }
     
     _likelihoods.clear();
@@ -303,6 +348,16 @@ void PolyBehavior<T>::relabelTransition(vector<T> &s){
 
 
 // IndexedState
+template <class T>
+IndexedBehavior<T>::IndexedBehavior(TiXmlElement *elem){
+
+    const char* c = elem->Attribute("str");
+    string s(c);
+    //This is dangerous for non string types.
+    _emissions = vector<T>(s.begin(), s.end());
+
+}
+
 template <class T>
 IndexedBehavior<T>::IndexedBehavior(vector<T> emissions, double mutr){
     _emissions = emissions;
@@ -343,8 +398,10 @@ int main(){
 
     HMM h("hmm.xml");
     
-    char* n = h.generate(100);
-    printf("%s\n", n);
-    free(n);
+    for(int ii = 0; ii < 100; ii++ ){
+        char* n = h.generate(100);
+        printf("%s\n", n);
+        free(n);
+    }
     return 0;
 }

@@ -79,6 +79,7 @@ class PolyBehavior : public Behavior<T> {
 template <class T>
 class IndexedBehavior : public Behavior<T> {
     public:
+        IndexedBehavior(TiXmlElement*);
         IndexedBehavior(std::vector<T>, double = 0.0);
         ~IndexedBehavior();
         virtual T emit(double, int = 0);
@@ -92,45 +93,48 @@ class IndexedBehavior : public Behavior<T> {
 class VState {
     friend class HMM;
     public:
-        virtual char emit(double) = 0;
-        virtual VState* transition(double) = 0;
+        virtual char emit(double, int=0) =0;
+        virtual VState* transition(double, int&) = 0;
         virtual bool hasTransition() = 0;
         virtual bool hasEmission() = 0;
+        int getId(){ return _id; };
+        std::string getLabel(){ return _label; }
     protected:
         virtual void relabelTransition(std::vector< VState* >&) = 0;
+        int _id;
+        std::string _label;
 };
 
 class State : public VState {
+    friend class VState;
     public:
         State();
         State(TiXmlElement*);
         State(int, char, int);
         State(std::list<std::pair<double, char> >, std::list<std::pair<double, int> >);
         ~State();
-        int getId(){ return _id; };
-        std::string getLabel(){ return _label; }
-        virtual VState* transition(double);
+        virtual VState* transition(double, int&);
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
-        char emit(double);
+        char emit(double, int=0);
         double emissionProbability(char, int);
         double transitionProbability(int);
     protected:
-        int _id;
-        std::string _label;
         Behavior<VState*> *_transition;
         Behavior<char> *_emission;
         bool _positionReset;
         void relabelTransition(std::vector< VState* >&);
-        virtual bool resetPosition(int=0){ return _positionReset; }
 };
 
 class IndexedState : public VState {
+    friend class VState;
     public:
         IndexedState();
         IndexedState(TiXmlElement*);
         ~IndexedState();
-        VState* transition(double, int=0);
+        VState* transition(double, int&);
+        virtual bool hasEmission(){ return true; }
+        virtual bool hasTransition(){ return true; }
         char emit(double, int);
     private:
         IndexedBehavior<char> *_emissions;
@@ -138,16 +142,6 @@ class IndexedState : public VState {
         Behavior<VState*> *_terminalTransition;
         void relabelTransition(std::vector< VState* >&);
         bool resetPosition(int pos){ return pos >= _emissions->size(); }
-};
-
-class EncapsulatingState : public VState {
-    public:
-        VState* transition(double p){ return _state->transition(p, _index); }
-        char emit(double p){ return _state->emit(p, _index); }
-    private:
-        void relabelTransition(std::vector< VState* >&) { return; };
-        int _index;
-        IndexedState *_state;
 };
 
 class SilentState : public State {
