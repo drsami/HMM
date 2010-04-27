@@ -47,7 +47,7 @@ void HMM::setTransitions(){
 
     vector< VState* >::iterator s_itr;
     for( s_itr = _states.begin(); s_itr != _states.end(); s_itr++ ){
-            (*s_itr)->relabelTransition(_states);
+        (*s_itr)->relabelTransition(_states);
     }
 }
 
@@ -66,7 +66,7 @@ char* HMM::generate(int request_length){
     while( ii < request_length ){
         ep = _rng.rand();
         tp = _rng.rand();
-        
+
         if( s->hasEmission() ){
             res[ii] = s->emit(ep, position);
             ii++;
@@ -80,6 +80,43 @@ char* HMM::generate(int request_length){
         }
     }
     return res;
+}
+
+void HMM::viterbi(char *seq, char *qual){
+
+    int len = strlen(seq); 
+    priority_queue<vsearch_entry<VState*> > dijkstraQueue;
+
+    vsearch_entry<VState*> head;
+    head.state = _startState;
+    head.position = 0;
+    head.emission = 0;
+    head.loglikelihood = 0.0;
+
+    dijkstraQueue.push(head);
+
+    while( !dijkstraQueue.empty() ){
+
+        vsearch_entry<VState*> node = dijkstraQueue.top();
+        dijkstraQueue.pop();
+
+        printf("<%d, %d, %d>: %e\n", node.state->getId(), node.emission, node.position, node.loglikelihood);
+
+        if( node.emission >= len ){
+            printf("Last node: %d, %d, %d\n", node.state->getId(), node.emission, node.position);
+            return;
+        }
+
+        double ep = 0.0;
+        if( qual ){
+            ep = node.state->emissionProbability(seq[node.emission], node.position, qual[node.emission]);
+        } else {
+            ep = node.state->emissionProbability(seq[node.emission], node.position);
+        }
+        
+        node.loglikelihood += ep;
+        node.state->enqueueTransitions(dijkstraQueue, node);
+    }
 }
 
 // HMM State
@@ -123,9 +160,7 @@ State::State(TiXmlElement* stateElem){
                 _emission = new PolyBehavior<char>(e->FirstChildElement());
             }
         } else {
-
             fprintf(stderr, "Got unexpected node type '%s'\n", e->Value());
-
         }
 
         ++ii;
@@ -149,7 +184,7 @@ VState* State::transition(double p, int &n){
     return _transition->emit(p); 
 }
 
-double State::transitionProbability(int state){
+double State::transitionProbability(VState* state, int position){
     return _transition->loglikelihood(state);
 }
 
@@ -157,14 +192,22 @@ char State::emit(double p, int n){
     return _emission->emit(p);
 }
 
-double State::emissionProbability(char em, int qual=INT_MIN){
-    return _emission->loglikelihood(em, qual);
+double State::emissionProbability(char em, int position, int qual){
+    if( hasEmission() ){
+        return _emission->loglikelihood(em, qual);
+    } else {
+        return 0.0;
+    }
 }
 
 void State::relabelTransition(vector<VState*> &s){
-   if( hasTransition() ){
+    if( hasTransition() ){
         _transition->relabelTransition(s); 
-   }
+    }
+}
+
+void State::enqueueTransitions(priority_queue<vsearch_entry<VState*> > &searchQueue, vsearch_entry<VState*> incomingNode){
+    _transition->enqueueBehavior(searchQueue, incomingNode, _positionReset, _positionIncrement, hasEmission() ); 
 }
 
 // IndexedState
@@ -206,21 +249,31 @@ char IndexedState::emit(double p, int index){
 
 VState* IndexedState::transition(double p, int &index){
     if( index < _emissions->size() - 1 ){
-       VState* rtrn = _internalTransition->emit(p, index);
-       ++index;
-       return rtrn;
+        VState* rtrn = _internalTransition->emit(p, index);
+        ++index;
+        return rtrn;
     } else {
         index = 0;
         return _terminalTransition->emit(p, 0);
     }
 }
 
+
+void IndexedState::enqueueTransitions(priority_queue<vsearch_entry<VState*> > &searchQueue, vsearch_entry<VState*> incomingNode){ 
+    if( incomingNode.position < _emissions->size() - 1 ){
+        _internalTransition->enqueueBehavior(searchQueue, incomingNode, false, true, hasEmission());
+    } else {
+        _terminalTransition->enqueueBehavior(searchQueue, incomingNode, true, false, hasEmission());
+    }
+}
+
 void IndexedState::relabelTransition(vector< VState* >& states){
 
-   _internalTransition->relabelTransition(states);
-   _terminalTransition->relabelTransition(states);
+    _internalTransition->relabelTransition(states);
+    _terminalTransition->relabelTransition(states);
 
 }
+
 // HMM Behavior
 template <class T>
 double Behavior<T>::loglikelihood(bool match, double mutr, int qual){
@@ -230,7 +283,7 @@ double Behavior<T>::loglikelihood(bool match, double mutr, int qual){
 
     //TODO What is the correct behavior here?
     // We haven't been given quality scores.
-      if( match ){
+    if( match ){
         if( INT_MIN != qual ){
             seq_err = QUAL2LL(qual);
         } else {
@@ -247,8 +300,8 @@ double Behavior<T>::loglikelihood(bool match, double mutr, int qual){
         }
 
         double e = mutr * (1 - seq_err)
-                 + (1 - mutr) * seq_err
-                 + mutr * seq_err;
+            + (1 - mutr) * seq_err
+            + mutr * seq_err;
 
         return log(e);
     }
@@ -273,6 +326,28 @@ double MonoBehavior<T>::loglikelihood(T emit, int qual){
 }
 
 template <class T>
+void MonoBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T> > &searchQueue, vsearch_entry<T> entry, bool reset, bool increment, bool silent){
+
+    vsearch_entry<T> newBehavior;
+    newBehavior.state = _emission;
+    if( reset ){
+        newBehavior.position = 0;
+    } else if( increment ){
+        newBehavior.position = entry.position + 1;
+    }
+
+    newBehavior.loglikelihood = entry.loglikelihood + log(_mutr);
+
+    if( silent ){
+        newBehavior.emission = entry.emission;
+    } else {
+        newBehavior.emission = entry.emission + 1;
+    }
+
+    searchQueue.push(newBehavior);
+}
+
+template <class T>
 void MonoBehavior<T>::relabelTransition(vector<T> &s){
     _emission = (T) s[(intptr_t)_emission];
 }
@@ -287,14 +362,14 @@ PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
     while( e ){
 
         e->QueryDoubleAttribute("prob", &p);
-        
+
         // TODO This is kludgey
         if( e->Attribute("nval") ){
             val = (T) atoi(e->Attribute("nval"));
         } else {
             val = (T) e->Attribute("val")[0];
         }
-        
+
         tally += p;
 
         e = e->NextSiblingElement();
@@ -307,7 +382,6 @@ PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
         _likelihoods.insert(pair<T, double>(val, log(p)));
     }
 }
-
 
 template <class T>
 T PolyBehavior<T>::emit(double p, int position){
@@ -334,22 +408,52 @@ double PolyBehavior<T>::loglikelihood(T emit, int qual){
 }
 
 template <class T>
+void PolyBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T> > &searchQueue, vsearch_entry<T> entry, bool reset, bool increment, bool silent){
+
+    vsearch_entry<T> newBehavior;
+    if( reset ){
+        newBehavior.position = 0;
+    } else if( increment ){
+        newBehavior.position = entry.position + 1;
+    }
+
+    if( silent ){
+        newBehavior.emission = entry.emission;
+    } else {
+        newBehavior.emission = entry.emission + 1;
+    }
+
+    typename map<T, double>::iterator l_itr;
+
+    for( l_itr = _likelihoods.begin(); l_itr != _likelihoods.end(); l_itr++ ){
+        newBehavior.state = l_itr->first;
+        newBehavior.loglikelihood = entry.loglikelihood + log(l_itr->second);
+        searchQueue.push(newBehavior);
+    }
+}
+
+template <class T>
 void PolyBehavior<T>::relabelTransition(vector<T> &s){
 
     typename map<double, T>::iterator e_itr;
 
+    map<T, double> newLikelihoods;
+
     for( e_itr = _emissions.begin(); e_itr != _emissions.end(); e_itr++ ){
-        int ptr = (intptr_t) (*e_itr).second;
+        double ll = _likelihoods.find(e_itr->second)->second;
+        int ptr = (intptr_t) e_itr->second;
         e_itr->second = (T) s[ptr];
+
+        newLikelihoods.insert(pair<T, double>((T) s[ptr], ll));
     }
-    
+
     _likelihoods.clear();
+    _likelihoods = newLikelihoods;
+
 
 
 
 }
-
-
 
 // IndexedState
 template <class T>
@@ -359,7 +463,7 @@ IndexedBehavior<T>::IndexedBehavior(TiXmlElement *elem){
     string s(c);
     //This is dangerous for non string types.
     _emissions = vector<T>(s.begin(), s.end());
-
+    elem->Attribute("mutr", &_mutr);
 }
 
 template <class T>
@@ -381,6 +485,11 @@ double IndexedBehavior<T>::loglikelihood(T emission, int position, int qual){
     return Behavior<T>::loglikelihood( emission == _emissions[position], _mutr, qual);
 }
 
+template <class T>
+void IndexedBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T> > &s, vsearch_entry<T> n, bool reset, bool increment, bool silent){
+    return;
+}
+
 // AcceptingState
 AcceptingState::AcceptingState(TiXmlElement *e) : SilentState(e) {
 }
@@ -397,13 +506,16 @@ SilentState::SilentState(int id, int successor){
 
 int main(){
 
-
     HMM h("hmm.xml");
-    
-    for(int ii = 0; ii < 100000; ii++ ){
-        char* n = h.generate(1000);
-        //printf("%s\n", n);
-        free(n);
-    }
+
+    char* n = h.generate(50);
+    h.viterbi(n);
+    free(n);
+    /*
+       for(int ii = 0; ii < 100000; ii++ ){
+       char* n = h.generate(1000);
+    //printf("%s\n", n);
+    free(n);
+    } */
     return 0;
 }
