@@ -123,6 +123,7 @@ class State : public VState {
         Behavior<VState*> *_transition;
         Behavior<char> *_emission;
         bool _positionReset;
+        bool _positionIncrement;
         void relabelTransition(std::vector< VState* >&);
 };
 

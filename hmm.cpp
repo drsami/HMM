@@ -36,11 +36,9 @@ HMM::HMM(const char* fn){
         if( (int) _states.size() <= s->getId() ){
             _states.resize(s->getId()+1);
         }
-        printf("Inserting state %d\n", s->getId());
         _states[s->getId()] = s;
     }
 
-    printf("Have %d states...\n", _states.size());
     setTransitions();
     _startState = _states[start];
 }
@@ -48,9 +46,7 @@ HMM::HMM(const char* fn){
 void HMM::setTransitions(){
 
     vector< VState* >::iterator s_itr;
-    int ii = 0;
     for( s_itr = _states.begin(); s_itr != _states.end(); s_itr++ ){
-            printf("Relabel state %d: ", ii++);
             (*s_itr)->relabelTransition(_states);
     }
 }
@@ -94,11 +90,18 @@ State::State(TiXmlElement* stateElem){
     stateElem->Attribute("id", &_id);
 
     const char* reset = stateElem->Attribute("NoReset");
+    const char* increment = stateElem->Attribute("Increment");
 
     if( reset ){
         _positionReset = false;
     } else {
         _positionReset = true;
+    }
+
+    if( increment ){
+        _positionIncrement = true;
+    } else {
+        _positionIncrement = false;
     }
 
     int ii = 0;
@@ -142,6 +145,7 @@ State::~State() {
 
 VState* State::transition(double p, int &n){
     if( _positionReset ){ n = 0; }
+    if( _positionIncrement ){ n = n + 1; }
     return _transition->emit(p); 
 }
 
@@ -158,7 +162,9 @@ double State::emissionProbability(char em, int qual=INT_MIN){
 }
 
 void State::relabelTransition(vector<VState*> &s){
-   _transition->relabelTransition(s); 
+   if( hasTransition() ){
+        _transition->relabelTransition(s); 
+   }
 }
 
 // IndexedState
@@ -268,9 +274,7 @@ double MonoBehavior<T>::loglikelihood(T emit, int qual){
 
 template <class T>
 void MonoBehavior<T>::relabelTransition(vector<T> &s){
-    printf("%p -> ", (intptr_t)_emission);
     _emission = (T) s[(intptr_t)_emission];
-    printf("%p\n", (intptr_t)_emission);
 }
 
 //      PolyBehavior
@@ -378,14 +382,12 @@ double IndexedBehavior<T>::loglikelihood(T emission, int position, int qual){
 }
 
 // AcceptingState
-AcceptingState::AcceptingState(TiXmlElement *e){
-
+AcceptingState::AcceptingState(TiXmlElement *e) : SilentState(e) {
 }
 
 
 // SilentState
-SilentState::SilentState(TiXmlElement *e){
-
+SilentState::SilentState(TiXmlElement *e) : State(e) {
 }
 
 SilentState::SilentState(int id, int successor){
@@ -398,9 +400,9 @@ int main(){
 
     HMM h("hmm.xml");
     
-    for(int ii = 0; ii < 100; ii++ ){
-        char* n = h.generate(100);
-        printf("%s\n", n);
+    for(int ii = 0; ii < 100000; ii++ ){
+        char* n = h.generate(1000);
+        //printf("%s\n", n);
         free(n);
     }
     return 0;
