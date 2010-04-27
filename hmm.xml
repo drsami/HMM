@@ -1,45 +1,44 @@
 <HMM Start="0">
-    <State id="0" type="indexed" label="IGHV1-24*01">
+    <State id="0" type="indexed" label="gene">
      <emissions str="CAGGTCCAGCTGGTACAGTCTGGGGCTGAGGTGAAGAAGCCTGGGGCCTCAGTGAAGGTCTCCTGCAAGGTTTCCGGATACACCCTCACTGAATTATCCATGCACTGGGTGCGACAGGCTCCTGGAAAAGGGCTTGAGTGGATGGGAGGTTTTGATCCTGAAGATGGTGAAACAATCTACGCACAGAAGTTCCAGGGCAGAGTCACCATGACCGAGGACACATCTACAGACACAGCCTACATGGAGCTGAGCAGCCTGAGATCTGAGGACACGGCCGTGTATTACTGTGCAACAGA" />
      <internalTransition>
-        <emission nval="1" prob="0.001" />
-        <emission nval="0" prob="0.999" />
+        <emission nval="1" prob="0.0001" />
+        <emission nval="4" prob="0.0001" />
+        <emission nval="0" prob="0.9998" />
      </internalTransition>
-     <externalTransition monomorphic="0" />
+     <externalTransition monomorphic="7" />
     </State>
 
     <State id="1" NoReset="true">
         <emissions>
-            <emission val="W" prob="0.25" />
-            <emission val="X" prob="0.25" />
-            <emission val="Y" prob="0.25" />
-            <emission val="Z" prob="0.25" />
+            <emission val="A" prob="0.25" />
+            <emission val="T" prob="0.25" />
+            <emission val="C" prob="0.25" />
+            <emission val="G" prob="0.25" />
         </emissions>
         <transitions>
             <emission nval="2" prob="0.99" />
             <emission nval="0" prob="0.01" />
         </transitions>
     </State>
-
     <State id="2" NoReset="true">
         <emissions>
-            <emission val="W" prob="0.25" />
-            <emission val="X" prob="0.25" />
-            <emission val="Y" prob="0.25" />
-            <emission val="Z" prob="0.25" />
+            <emission val="A" prob="0.25" />
+            <emission val="T" prob="0.25" />
+            <emission val="C" prob="0.25" />
+            <emission val="G" prob="0.25" />
         </emissions>
         <transitions>
             <emission nval="0" prob="0.01" />
             <emission nval="3" prob="0.99" />
         </transitions>
     </State>
-
     <State id="3" NoReset="true">
         <emissions>
-            <emission val="W" prob="0.25" />
-            <emission val="X" prob="0.25" />
-            <emission val="Y" prob="0.25" />
-            <emission val="Z" prob="0.25" />
+            <emission val="A" prob="0.25" />
+            <emission val="T" prob="0.25" />
+            <emission val="C" prob="0.25" />
+            <emission val="G" prob="0.25" />
         </emissions>
         <transitions>
             <emission nval="0" prob="0.99" />
@@ -47,5 +46,24 @@
         </transitions>
     </State>
 
+    <State id="4" type="silent" NoReset="true" Increment="true">
+        <transitions>
+            <emission nval="5" prob="0.99" />
+            <emission nval="0" prob="0.01" />
+        </transitions>
+    </State>
+    <State id="5" type="silent" NoReset="true" Increment="true">
+        <transitions>
+            <emission nval="6" prob="0.99" />
+            <emission nval="0" prob="0.01" />
+        </transitions>
+    </State>
+    <State id="6" type="silent" NoReset="true" Increment="true">
+        <transitions>
+            <emission nval="0" prob="0.99" />
+            <emission nval="4" prob="0.01" />
+        </transitions>
+    </State>
 
+    <State id="7" type="accepting" />
 </HMM>
