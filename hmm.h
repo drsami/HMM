@@ -65,7 +65,7 @@ class Behavior {
 template <class T>
 class MonoBehavior : public Behavior<T> {
     public:
-        MonoBehavior(T, double = 0.0);
+        MonoBehavior(T, double);
         ~MonoBehavior();
         virtual T emit(double, int = 0);
         virtual double loglikelihood(T, int=INT_MIN);
@@ -73,7 +73,9 @@ class MonoBehavior : public Behavior<T> {
         void enqueueBehavior(std::priority_queue<vsearch_entry<T> >&, vsearch_entry<T>, bool=true,bool=false,bool=false);
     private:
         T _emission;
-        double _mutr;
+        double _prob;
+        double _likelihood;
+        double _notlikelihood;
 };
 
 // PolyBehavior
@@ -105,7 +107,9 @@ class IndexedBehavior : public Behavior<T> {
         void enqueueBehavior(std::priority_queue<vsearch_entry<T> >&, vsearch_entry<T>, bool = false, bool = true, bool = false);
     private:
         std::vector<T> _emissions;
-        double _mutr;
+        double _prob;
+        double _likelihood;
+        double _notlikelihood;
 };
 
 class VState {
@@ -120,6 +124,8 @@ class VState {
         virtual void enqueueTransitions(std::priority_queue<vsearch_entry<VState*> >&, vsearch_entry<VState*>) = 0;
         virtual double emissionProbability(char, int = 0, int=INT_MIN) = 0;
         virtual double transitionProbability(VState*,int = 0) = 0;
+        virtual bool incrementing() = 0;
+        virtual bool resetting() = 0;
     protected:
         virtual void relabelTransition(std::vector< VState* >&) = 0;
         int _id;
@@ -141,6 +147,8 @@ class State : public VState {
         double emissionProbability(char, int=0, int=INT_MIN);
         double transitionProbability(VState*, int = 0);
         virtual void enqueueTransitions(std::priority_queue<vsearch_entry<VState*> >&, vsearch_entry<VState*> );
+        bool incrementing(){ return _positionIncrement; }
+        bool resetting(){ return _positionReset; }
     protected:
         Behavior<VState*> *_transition;
         Behavior<char> *_emission;
@@ -162,6 +170,9 @@ class IndexedState : public VState {
         virtual void enqueueTransitions(std::priority_queue<vsearch_entry<VState*> >&, vsearch_entry<VState*>);
         double emissionProbability(char, int=0, int=INT_MIN){ return DBL_EPSILON; }
         double transitionProbability(VState*, int = 0) { return DBL_EPSILON; }
+        bool incrementing(){ return true; }
+        bool resetting(){ return false; }
+
     private:
         IndexedBehavior<char> *_emissions;
         Behavior<VState*> *_internalTransition;

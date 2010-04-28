@@ -104,6 +104,7 @@ void HMM::viterbi(char *seq, char *qual){
 
         if( node.emission >= len ){
             printf("Last node: %d, %d, %d\n", node.state->getId(), node.emission, node.position);
+            printf("Queue size: %d\n", dijkstraQueue.size());
             return;
         }
 
@@ -113,8 +114,16 @@ void HMM::viterbi(char *seq, char *qual){
         } else {
             ep = node.state->emissionProbability(seq[node.emission], node.position);
         }
-        
-        node.loglikelihood += ep;
+       
+        if( node.state->incrementing() ){
+            node.emission += 1;
+        }
+
+        if( node.state->resetting() ){
+            node.position = 0;
+        }
+
+        node.loglikelihood = node.loglikelihood + ep;
         node.state->enqueueTransitions(dijkstraQueue, node);
     }
 }
@@ -144,10 +153,12 @@ State::State(TiXmlElement* stateElem){
     int ii = 0;
     for( TiXmlElement* e = stateElem->FirstChildElement(); e; e = e->NextSiblingElement() ){
 
+        double callProb;
         if( 0 == strcmp("transitions", e->Value()) ){
             int trans;
             if( e->Attribute("monomorphic", &trans) ){
-                _transition = new MonoBehavior<VState*>((VState*) trans);
+                e->Attribute("prob", &callProb);
+                _transition = new MonoBehavior<VState*>((VState*) trans, callProb);
             } else {
                 _transition = new PolyBehavior<VState*>(e->FirstChildElement());
             }
@@ -155,7 +166,8 @@ State::State(TiXmlElement* stateElem){
             char emit;
             if( e->Attribute("monomorphic") ){
                 emit = e->Attribute("monomorphic")[0];
-                _emission = new MonoBehavior<char>(emit);
+                e->Attribute("prob", &callProb);
+                _emission = new MonoBehavior<char>(emit, callProb);
             } else {
                 _emission = new PolyBehavior<char>(e->FirstChildElement());
             }
@@ -165,12 +177,6 @@ State::State(TiXmlElement* stateElem){
 
         ++ii;
     }
-}
-
-State::State(int id, char emission, int transition){
-    _id = id;
-    _emission = new MonoBehavior<char>(emission);
-    _transition = new MonoBehavior<VState*>((VState*) transition);
 }
 
 State::~State() { 
@@ -193,6 +199,7 @@ char State::emit(double p, int n){
 }
 
 double State::emissionProbability(char em, int position, int qual){
+    return 1.0;
     if( hasEmission() ){
         return _emission->loglikelihood(em, qual);
     } else {
@@ -217,18 +224,20 @@ IndexedState::IndexedState(TiXmlElement *elem){
 
     int ii = 0;
     for( TiXmlElement* e = elem->FirstChildElement(); e; e = e->NextSiblingElement() ){
-
+        double callProb;
         if( 0 == strcmp("internalTransition", e->Value()) ){
             int trans;
             if( e->Attribute("monomorphic", &trans) ){
-                _internalTransition = new MonoBehavior<VState*>((VState*) trans);
+                e->Attribute("prob", &callProb);
+                _internalTransition = new MonoBehavior<VState*>((VState*) trans, callProb);
             } else {
                 _internalTransition = new PolyBehavior<VState*>(e->FirstChildElement());
             }
         } else if( 0 == strcmp("externalTransition", e->Value()) ){
             int trans;
             if( e->Attribute("monomorphic", &trans) ){
-                _terminalTransition = new MonoBehavior<VState*>((VState*) trans);
+                e->Attribute("prob", &callProb);
+                _terminalTransition = new MonoBehavior<VState*>((VState*) trans, callProb);
             } else {
                 _terminalTransition = new PolyBehavior<VState*>(e->FirstChildElement());
             }
@@ -276,42 +285,27 @@ void IndexedState::relabelTransition(vector< VState* >& states){
 
 // HMM Behavior
 template <class T>
-double Behavior<T>::loglikelihood(bool match, double mutr, int qual){
+double Behavior<T>::loglikelihood(bool match, double prob, int qual){
     // err is a measure of sequencing error
     // _mutr measures mutational rate
-    double seq_err = 0.0;
 
     //TODO What is the correct behavior here?
     // We haven't been given quality scores.
     if( match ){
-        if( INT_MIN != qual ){
-            seq_err = QUAL2LL(qual);
-        } else {
-            seq_err = 0.0;
-        }
-        return (log(1.0 - mutr) + seq_err);
-
+        return log(prob);
     } else {
-
-        if( INT_MIN != qual ){
-            seq_err = QUAL2ERROR(qual);
-        } else {
-            seq_err = DBL_EPSILON;
-        }
-
-        double e = mutr * (1 - seq_err)
-            + (1 - mutr) * seq_err
-            + mutr * seq_err;
-
-        return log(e);
+        return log(1.0 - prob);
     }
+
 }
 
 //      MonoBehavior
 template <class T>
 MonoBehavior<T>::MonoBehavior(T emission, double errorRate){
     _emission = emission;
-    _mutr = errorRate;
+    _prob = errorRate;
+    _likelihood = log(_prob);
+    _notlikelihood = log(1.0 - _prob);
 }
 
 template <class T>
@@ -320,9 +314,10 @@ MonoBehavior<T>::~MonoBehavior(){ }
 template <class T>
 T MonoBehavior<T>::emit(double n, int position){ return _emission; }
 
+
 template <class T>
 double MonoBehavior<T>::loglikelihood(T emit, int qual){
-    return Behavior<T>::loglikelihood( emit == _emission, _mutr, qual);
+    return Behavior<T>::loglikelihood(emit == _emission, _prob, qual);
 }
 
 template <class T>
@@ -336,7 +331,8 @@ void MonoBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T> > &searchQ
         newBehavior.position = entry.position + 1;
     }
 
-    newBehavior.loglikelihood = entry.loglikelihood + log(_mutr);
+    printf("Probability:\t%e\t%e\n", _prob, log(_prob));
+    newBehavior.loglikelihood = entry.loglikelihood + _prob;
 
     if( silent ){
         newBehavior.emission = entry.emission;
@@ -379,7 +375,7 @@ PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
         _emissions.insert(pair<double, T>(tally, val));
 
         //TODO Is this actually what I want?
-        _likelihoods.insert(pair<T, double>(val, log(p)));
+        _likelihoods.insert(pair<T, double>(val, p));
     }
 }
 
@@ -396,13 +392,11 @@ double PolyBehavior<T>::loglikelihood(T emit, int qual){
 
     if( itr != _likelihoods.end() ){
         double p = (*itr).second;
-        return log(p) + LOGERROR(qual);
+        return log(p); //+ LOGERROR(qual);
     } else {
         // The probability of something else...
         double p = 1.0 - _density; // innate error probability
-        double err = QUAL2ERROR(qual); // sequencing error rate
-        return log((1 - p) * err + p * (1 - err) + (1 - p) * (1 - err));
-
+        return log(p);
     }
 
 }
@@ -444,6 +438,7 @@ void PolyBehavior<T>::relabelTransition(vector<T> &s){
         int ptr = (intptr_t) e_itr->second;
         e_itr->second = (T) s[ptr];
 
+        printf("%e\n", ll);
         newLikelihoods.insert(pair<T, double>((T) s[ptr], ll));
     }
 
@@ -463,13 +458,9 @@ IndexedBehavior<T>::IndexedBehavior(TiXmlElement *elem){
     string s(c);
     //This is dangerous for non string types.
     _emissions = vector<T>(s.begin(), s.end());
-    elem->Attribute("mutr", &_mutr);
-}
-
-template <class T>
-IndexedBehavior<T>::IndexedBehavior(vector<T> emissions, double mutr){
-    _emissions = emissions;
-    _mutr = mutr;
+    elem->Attribute("prob", &_prob);
+    _likelihood = log(_prob);
+    _notlikelihood = log(1.0 - _prob);
 }
 
 template <class T>
@@ -482,7 +473,7 @@ T IndexedBehavior<T>::emit(double p, int position){
 
 template <class T>
 double IndexedBehavior<T>::loglikelihood(T emission, int position, int qual){
-    return Behavior<T>::loglikelihood( emission == _emissions[position], _mutr, qual);
+    return 1.0; //Behavior<T>::loglikelihood(emit == _emissions[position], _prob, qual);
 }
 
 template <class T>
@@ -499,23 +490,17 @@ AcceptingState::AcceptingState(TiXmlElement *e) : SilentState(e) {
 SilentState::SilentState(TiXmlElement *e) : State(e) {
 }
 
-SilentState::SilentState(int id, int successor){
-    _id = id;
-    _transition = new MonoBehavior<VState*>((VState*) successor);  
-}
-
 int main(){
 
     HMM h("hmm.xml");
-
-    char* n = h.generate(50);
+    
+    char* n = h.generate(200);
     h.viterbi(n);
-    free(n);
     /*
-       for(int ii = 0; ii < 100000; ii++ ){
+    for(int ii = 0; ii < 100000; ii++ ){
        char* n = h.generate(1000);
     //printf("%s\n", n);
-    free(n);
-    } */
+        free(n);
+    }*/
     return 0;
 }
