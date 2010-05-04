@@ -6,15 +6,16 @@ using namespace std;
 // HMM
 
 HMM::HMM(const char* fn){
-
+    _rng = MTRand(); 
     TiXmlDocument doc(fn);
     doc.LoadFile();
 
     TiXmlElement* root = doc.RootElement();
 
     // Instantiate the start state
-    int start;
+    int start = INT_MIN;
     root->Attribute("start", &start);
+    assert( start != INT_MIN );
 
     for( TiXmlElement* e = root->FirstChildElement(); e; e = e->NextSiblingElement() ){
 
@@ -52,7 +53,14 @@ void HMM::setTransitions(){
     }
 }
 
-HMM::~HMM(){ }
+HMM::~HMM(){
+    vector<VState*>::iterator sv_itr;
+    for( sv_itr = _states.begin(); sv_itr != _states.end(); ){
+        VState* s = (*sv_itr);
+        sv_itr++;
+        delete s;
+    }
+}
 
 char* HMM::generate(int request_length){
 
@@ -88,7 +96,7 @@ void HMM::viterbi(char *seq, char *qual){
     int len = strlen(seq); 
     int numSearched = 0;
     priority_queue<vsearch_entry<VState*>* > dijkstraQueue;
-    list<vsearch_entry<VState*>* > expandedNodes;
+    list<vsearch_entry<VState*>* > allNodes;
 
     vsearch_entry<VState*> *head = new vsearch_entry<VState*>();
     head->state = _startState;
@@ -103,7 +111,6 @@ void HMM::viterbi(char *seq, char *qual){
 
         numSearched++;
         vsearch_entry<VState*> *node = dijkstraQueue.top();
-        expandedNodes.push_back(node);
         dijkstraQueue.pop();
 
         //printf("<%d, %d, %d>: %e\n", node.state->getId(), node.emission, node.position, node.loglikelihood);
@@ -112,19 +119,29 @@ void HMM::viterbi(char *seq, char *qual){
             printf("Last node: %d, %d, %d\n", node->state->getId(), node->emission, node->position);
             printf("Searched: %d\tQueue size: %d\n", numSearched, dijkstraQueue.size());
 
+            list<string> labels;
+
             do{
-                printf("Backtrace:\n");
-                printf("%p\n", node->state);
+            
+                string str = node->state->getLabel();
+                if( !str.empty() && str != labels.front() ){
+                    labels.push_front(str);
+                }
+
             } while( node->incoming && (node = node->incoming) );
 
 
-            list<vsearch_entry<VState*>* >::iterator sl_itr = expandedNodes.begin();
+            list<string>::iterator label_itr;
 
-            int ii = 0;
-            for( sl_itr = expandedNodes.begin(); sl_itr != expandedNodes.end(); sl_itr++ ){
-                printf("Freed entry %d (%p)\n", ++ii, (*sl_itr));
-                vsearch_entry<VState*> *delnode = (*sl_itr);
-                sl_itr++;
+            for( label_itr = labels.begin(); label_itr != labels.end(); label_itr++ ){
+                printf("%s\n", (*label_itr).c_str());
+            }
+
+            /* Throw everything out */
+            list<vsearch_entry<VState*>* >::iterator all_itr = allNodes.begin();
+            for( ; all_itr != allNodes.end(); ){
+                vsearch_entry<VState*> *delnode = (*all_itr);
+                all_itr++;
                 delete delnode;
             }
 
@@ -135,6 +152,7 @@ void HMM::viterbi(char *seq, char *qual){
         if( qual ){
             ep = node->state->emissionProbability(seq[node->emission], node->position, qual[node->emission]);
         } else {
+            //printf("Position: %d\n", node->position);
             ep = node->state->emissionProbability(seq[node->emission], node->position);
         }
 
@@ -147,7 +165,7 @@ void HMM::viterbi(char *seq, char *qual){
         }
 
         node->loglikelihood = node->loglikelihood + ep;
-        node->state->enqueueTransitions(dijkstraQueue, node);
+        node->state->enqueueTransitions(allNodes, dijkstraQueue, node);
     }
 }
 
@@ -158,8 +176,17 @@ State::State(TiXmlElement* stateElem){
 
     stateElem->Attribute("id", &_id);
 
+    _emission = NULL;
+    _transition = NULL;
+
     const char* reset = stateElem->Attribute("NoReset");
     const char* increment = stateElem->Attribute("Increment");
+
+    const char* label = stateElem->Attribute("label");
+
+    if( label ){
+        _label = string(label);
+    }
 
     if( reset ){
         _positionReset = false;
@@ -202,9 +229,9 @@ State::State(TiXmlElement* stateElem){
     }
 }
 
-State::~State() { 
-    // delete _emission;
-    // delete _transition;
+State::~State() {
+    if( _emission ){ delete _emission;_emission = NULL; }
+    if( _transition ){ delete _transition; _transition = NULL; }
 }
 
 VState* State::transition(double p, int &n){
@@ -222,7 +249,6 @@ char State::emit(double p, int n){
 }
 
 double State::emissionProbability(char em, int position, int qual){
-    return 1.0;
     if( hasEmission() ){
         return _emission->loglikelihood(em, qual);
     } else {
@@ -236,14 +262,23 @@ void State::relabelTransition(vector<VState*> &s){
     }
 }
 
-void State::enqueueTransitions(priority_queue<vsearch_entry<VState*>* > &searchQueue, vsearch_entry<VState*> *incomingNode){
-    _transition->enqueueBehavior(searchQueue, incomingNode, _positionReset, _positionIncrement, hasEmission() ); 
+void State::enqueueTransitions(
+        list<vsearch_entry<VState*>*> &allNodes,
+        priority_queue<vsearch_entry<VState*>* > &searchQueue, 
+        vsearch_entry<VState*> *incomingNode){
+    _transition->enqueueBehavior(allNodes, searchQueue, incomingNode, _positionReset, _positionIncrement, hasEmission() ); 
 }
 
 // IndexedState
 IndexedState::IndexedState(TiXmlElement *elem){
 
     elem->Attribute("id", &_id);
+
+    const char* label = elem->Attribute("label");
+
+    if( label ){
+        _label = string(label);
+    }
 
     int ii = 0;
     for( TiXmlElement* e = elem->FirstChildElement(); e; e = e->NextSiblingElement() ){
@@ -259,7 +294,8 @@ IndexedState::IndexedState(TiXmlElement *elem){
         } else if( 0 == strcmp("terminalTransition", e->Value()) ){
             int trans;
             if( e->Attribute("monomorphic", &trans) ){
-                e->Attribute("prob", &callProb);
+                //e->Attribute("prob", &callProb);
+                callProb = 1.0;
                 _terminalTransition = new MonoBehavior<VState*>((VState*) trans, callProb);
             } else {
                 _terminalTransition = new PolyBehavior<VState*>(e->FirstChildElement());
@@ -273,6 +309,12 @@ IndexedState::IndexedState(TiXmlElement *elem){
         ++ii;
     }
 
+}
+
+IndexedState::~IndexedState(){
+    delete _emissions;
+    delete _internalTransition;
+    delete _terminalTransition;
 }
 
 char IndexedState::emit(double p, int index){
@@ -291,13 +333,33 @@ VState* IndexedState::transition(double p, int &index){
 }
 
 
-void IndexedState::enqueueTransitions(priority_queue<vsearch_entry<VState*>* > &searchQueue, vsearch_entry<VState*> *incomingNode){ 
+void IndexedState::enqueueTransitions(
+        list<vsearch_entry<VState*>*> &allNodes,
+        priority_queue<vsearch_entry<VState*>* > &searchQueue, 
+        vsearch_entry<VState*> *incomingNode){ 
     if( incomingNode->position < _emissions->size() - 1 ){
-        _internalTransition->enqueueBehavior(searchQueue, incomingNode, false, true, hasEmission());
+        _internalTransition->enqueueBehavior(allNodes, searchQueue, incomingNode, false, true, hasEmission());
     } else {
-        _terminalTransition->enqueueBehavior(searchQueue, incomingNode, true, false, hasEmission());
+        _terminalTransition->enqueueBehavior(allNodes, searchQueue, incomingNode, true, false, hasEmission());
     }
 }
+
+double IndexedState::transitionProbability(VState* state, int position){
+    if( position < _emissions->size() - 1){
+        return _internalTransition->loglikelihood(state);
+    } else {
+        return _terminalTransition->loglikelihood(state);
+    }
+}
+
+double IndexedState::emissionProbability(char em, int position, int qual){
+    if( hasEmission() ){
+        return _emissions->loglikelihood(em, position, qual);
+    } else {
+        return 0.0;
+    }
+}
+
 
 void IndexedState::relabelTransition(vector< VState* >& states){
 
@@ -308,7 +370,7 @@ void IndexedState::relabelTransition(vector< VState* >& states){
 
 // HMM Behavior
 template <class T>
-double Behavior<T>::loglikelihood(bool match, double prob, int qual){
+double Behavior<T>::LogLikelihood(bool match, double prob, int qual){
     // err is a measure of sequencing error
     // _mutr measures mutational rate
 
@@ -329,6 +391,7 @@ MonoBehavior<T>::MonoBehavior(T emission, double errorRate){
     _prob = errorRate;
     _likelihood = log(_prob);
     _notlikelihood = log(1.0 - _prob);
+    assert(_prob > 0 && _prob <= 1.0);
 }
 
 template <class T>
@@ -340,11 +403,14 @@ T MonoBehavior<T>::emit(double n, int position){ return _emission; }
 
 template <class T>
 double MonoBehavior<T>::loglikelihood(T emit, int qual){
-    return Behavior<T>::loglikelihood(emit == _emission, _prob, qual);
+    return Behavior<T>::LogLikelihood(emit == _emission, _prob, qual);
 }
 
 template <class T>
-void MonoBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T>* > &searchQueue, vsearch_entry<T> *entry, bool reset, bool increment, bool silent){
+void MonoBehavior<T>::enqueueBehavior(
+        list<vsearch_entry<T>*> &all_nodes,
+        priority_queue<vsearch_entry<T>* > &searchQueue, 
+        vsearch_entry<T> *entry, bool reset, bool increment, bool silent){
 
     vsearch_entry<T> *newBehavior = new vsearch_entry<T>();
     newBehavior->state = _emission;
@@ -362,7 +428,7 @@ void MonoBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T>* > &search
     } else {
         newBehavior->emission = entry->emission + 1;
     }
-
+    all_nodes.push_back(newBehavior);
     searchQueue.push(newBehavior);
 }
 
@@ -403,6 +469,12 @@ PolyBehavior<T>::PolyBehavior(TiXmlElement* e){
 }
 
 template <class T>
+PolyBehavior<T>::~PolyBehavior(){
+    _emissions.clear();
+    _likelihoods.clear();
+}
+
+template <class T>
 T PolyBehavior<T>::emit(double p, int position){
     return (*_emissions.lower_bound(p)).second;
 }
@@ -425,7 +497,10 @@ double PolyBehavior<T>::loglikelihood(T emit, int qual){
 }
 
 template <class T>
-void PolyBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T>* > &searchQueue, vsearch_entry<T> *entry, bool reset, bool increment, bool silent){
+void PolyBehavior<T>::enqueueBehavior(
+        list<vsearch_entry<T>*> &all_nodes,
+        priority_queue<vsearch_entry<T>* > &searchQueue, 
+        vsearch_entry<T> *entry, bool reset, bool increment, bool silent){
 
     typename map<T, double>::iterator l_itr;
     for( l_itr = _likelihoods.begin(); l_itr != _likelihoods.end(); l_itr++ ){
@@ -435,6 +510,8 @@ void PolyBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T>* > &search
             newBehavior->position = 0;
         } else if( increment ){
             newBehavior->position = entry->position + 1;
+        } else {
+            newBehavior->position = entry->position;
         }
 
         if( silent ){
@@ -446,6 +523,7 @@ void PolyBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T>* > &search
 
         newBehavior->state = l_itr->first;
         newBehavior->loglikelihood = entry->loglikelihood + log(l_itr->second);
+        all_nodes.push_back(newBehavior);
         searchQueue.push(newBehavior);
     }
 }
@@ -467,10 +545,6 @@ void PolyBehavior<T>::relabelTransition(vector<T> &s){
 
     _likelihoods.clear();
     _likelihoods = newLikelihoods;
-
-
-
-
 }
 
 // IndexedState
@@ -484,6 +558,7 @@ IndexedBehavior<T>::IndexedBehavior(TiXmlElement *elem){
     elem->Attribute("prob", &_prob);
     _likelihood = log(_prob);
     _notlikelihood = log(1.0 - _prob);
+    assert(_prob > 0.0 && _prob <= 1.0);
 }
 
 template <class T>
@@ -496,11 +571,15 @@ T IndexedBehavior<T>::emit(double p, int position){
 
 template <class T>
 double IndexedBehavior<T>::loglikelihood(T emission, int position, int qual){
-    return 1.0; //Behavior<T>::loglikelihood(emit == _emissions[position], _prob, qual);
+    bool match = emission == _emissions[position];
+    return Behavior<T>::LogLikelihood(match, _prob, qual);
 }
 
 template <class T>
-void IndexedBehavior<T>::enqueueBehavior(priority_queue<vsearch_entry<T>* > &s, vsearch_entry<T> *n, bool reset, bool increment, bool silent){
+void IndexedBehavior<T>::enqueueBehavior(
+        list<vsearch_entry<T>*> &all_nodes,
+        priority_queue<vsearch_entry<T>* > &s, 
+        vsearch_entry<T> *n, bool reset, bool increment, bool silent){
     return;
 }
 
@@ -515,13 +594,12 @@ SilentState::SilentState(TiXmlElement *e) : State(e) {
 
 int main(){
 
-    HMM h("hmm.xml");
+    HMM *h = new HMM("hmm.xml");
 
-
-    char* n = h.generate(300);
-    h.viterbi(n);
-    printf("%s\n", n);
-    free(n);
-
+    //char* n = h->generate(300);
+    //h->viterbi(n);
+    //printf("%s\n", n);
+    //free(n);
+    delete h;
     return 0;
 }
