@@ -35,7 +35,8 @@
       (cons
        `(State ((id ,(number->string id))
                 (type "indexed")
-                (label ,label))
+                (label ,label)
+                (prob "0.999"))
                (emissions ((str ,str)))
                (internalTransition ()
                                    (emission ((nval ,(number->string (+ id 1))) 
@@ -44,7 +45,7 @@
                                               (prob "0.0001")))
                                    (emission ((nval ,(number->string id))
                                               (prob "0.9998"))))
-               (terminalTransition ((monomorphic ,(number->string terminal)))))
+               (terminalTransition ((prob "1.0") (monomorphic ,(number->string terminal)))))
        substates)))))
 
 (define nucleotides '(("A" "0.25") ("T" "0.25") ("C" "0.25") ("G" "0.25")))
