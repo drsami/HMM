@@ -18,7 +18,7 @@
 
 (define (makeIdentity id)
   `(State ((id ,(number->string id)))
-          (transitions ((monomorphic ,(number->string id))))
+          (transitions ((prob "1.0") (monomorphic ,(number->string id))))
           ,(makeEmissions nucleotides)))
 
 (define (makeIndexedStates id end seqs)
@@ -173,3 +173,7 @@
          (cdr v-hmm)
          (cdr d-hmm)
          (cdr j-hmm))))    
+
+(define (write-out x)
+  (write-to-file (xexpr->string hmm) x))
+  
