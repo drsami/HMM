@@ -34,6 +34,19 @@ class vsearch_entry {
         }
 };
 
+template <class T>
+class vsearch {
+
+    public:
+        vsearch(vsearch_entry<T> *n){ entry = n; } 
+        vsearch_entry<T>* get() const { return entry; }
+        bool operator<(const vsearch<T> n) const {
+            return *(this->entry) < *(n.get());
+        }
+    private:
+        vsearch_entry<T> *entry;
+};
+
 class HMM {
     public:
         HMM();

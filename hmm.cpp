@@ -66,6 +66,7 @@ char* HMM::generate(int request_length){
 
     char* res = (char*) calloc(request_length + 1, sizeof(char));
     //I don't need to set the null terminator on res, calloc does that for me.
+    
 
     VState* s = _startState;
     double ep = 0.0;
@@ -95,7 +96,7 @@ void HMM::viterbi(char *seq, char *qual){
 
     int len = strlen(seq); 
     int numSearched = 0;
-    priority_queue<vsearch_entry<VState*>* > dijkstraQueue;
+    priority_queue<vsearch<VState*> > dijkstraQueue;
     list<vsearch_entry<VState*>* > allNodes;
 
     vsearch_entry<VState*> *head = new vsearch_entry<VState*>();
@@ -105,12 +106,13 @@ void HMM::viterbi(char *seq, char *qual){
     head->emission = 0;
     head->loglikelihood = 0.0;
 
-    dijkstraQueue.push(head);
+    dijkstraQueue.push(vsearch<VState*>(head));
 
     while( !dijkstraQueue.empty() ){
 
         numSearched++;
-        vsearch_entry<VState*> *node = dijkstraQueue.top();
+        vsearch<VState*> search = dijkstraQueue.top();
+        vsearch_entry<VState*> *node = search.get();
         dijkstraQueue.pop();
 
         //printf("<%d, %d, %d>: %e\n", node.state->getId(), node.emission, node.position, node.loglikelihood);
@@ -165,7 +167,7 @@ void HMM::viterbi(char *seq, char *qual){
         }
 
         node->loglikelihood = node->loglikelihood + ep;
-        node->state->enqueueTransitions(allNodes, dijkstraQueue, node);
+        //node->state->enqueueTransitions(allNodes, dijkstraQueue, node);
     }
 }
 
@@ -592,14 +594,16 @@ AcceptingState::AcceptingState(TiXmlElement *e) : SilentState(e) {
 SilentState::SilentState(TiXmlElement *e) : State(e) {
 }
 
+/*
 int main(){
 
     HMM *h = new HMM("hmm.xml");
 
-    //char* n = h->generate(300);
-    //h->viterbi(n);
-    //printf("%s\n", n);
-    //free(n);
+    char* n = h->generate(300);
+    h->viterbi(n);
+    printf("%s\n", n);
+    free(n);
     delete h;
     return 0;
 }
+*/
