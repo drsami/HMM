@@ -1,1 +1,4 @@
 A hidden-markov model library for high-throughput DNA sequence analysis.
+
+Dependencies:
+    * Boost
