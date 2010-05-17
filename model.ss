@@ -23,9 +23,19 @@
 
 (define (makeIndexedStates id end seqs)
   (foldl (lambda (n acc)
-           (let ((res (makeIndexedState (car acc) (car n) (cadr n) makeSubstructure end)))
+           (let ((res (makeSimpleIndexedState (car acc) (car n) (cadr n) makeSubstructure end)))
              (cons (car res) (append (cdr res) (cdr acc)))))
    (list id) seqs))
+
+(define (makeSimpleIndexedState id label str substructure terminal)
+  (cons (+ id 1)
+  (cons `(State ((id ,(number->string id))
+           (type "indexed")
+           (label ,label)
+           (prob "0.999"))
+          (emissions ((str ,str)))
+          (internalTransition ((prob "1.0") (monomorphic ,(number->string id))))
+          (terminalTransition ((prob "1.0") (monomorphic ,(number->string terminal))))) '())))
 
 (define (makeIndexedState id label str substructure terminal)
   (let ((sub (substructure (+ id 1))))
