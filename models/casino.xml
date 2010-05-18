@@ -1,0 +1,23 @@
+<HMM start="0">
+ <State id="0">
+   <transitions>
+     <emission nval="1" prob="0.05" />
+     <emission nval="0" prob="0.95" />
+   </transitions>
+   <emissions>
+     <emission val="0" prob="0.5" />
+     <emission val="1" prob="0.5" />
+   </emissions>
+ </State>
+
+ <State id="1">
+   <transitions>
+     <emission nval="0" prob="0.05" />
+     <emission nval="1" prob="0.95" />
+   </transitions>
+   <emissions>
+     <emission val="0" prob="0.9" />
+     <emission val="1" prob="0.1" />
+   </emissions>
+ </State>
+</HMM>
