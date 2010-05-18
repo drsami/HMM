@@ -4,7 +4,6 @@
 #include "tinyxml.h"
 #include "MersenneTwister.h"
 
-#include <assert.h>
 #include <float.h>
 #include <math.h>
 #include <signal.h>
@@ -12,12 +11,33 @@
 #include <list>
 #include <map>
 #include <queue>
+#include <set>
 #include <utility>
 #include <vector>
 
 class HMM;
 class VState;
 class State;
+
+typedef struct{
+    double v;
+} logdouble;
+
+logdouble operator+(const logdouble lhs, const logdouble rhs){
+    logdouble r;
+    r.v = lhs.v + rhs.v;
+    return r;
+}
+
+logdouble operator+(const logdouble lhs, const double rhs){
+    logdouble r;
+    r.v = lhs.v + log(rhs);
+    return r;
+}
+
+bool operator<(const logdouble lhs, const logdouble rhs){
+    return lhs.v < rhs.v;
+}
 
 template <class T>
 class vsearch_entry {
@@ -28,24 +48,29 @@ class vsearch_entry {
         vsearch_entry<T>* incoming;
         int position;
         int emission;
-        double loglikelihood;
-        bool operator<(const vsearch_entry<T> n) const {
+        logdouble loglikelihood;
+         bool operator<(const vsearch_entry<T> n) const {
             return loglikelihood < n.loglikelihood;
         }
 };
 
 template <class T>
 class vsearch {
-
     public:
-        vsearch(vsearch_entry<T> *n){ entry = n; } 
-        vsearch_entry<T>* get() const { return entry; }
+        vsearch(vsearch_entry<T> *v) { _v = v; }
+        vsearch_entry<T>* getEntry(){ return _v; }
         bool operator<(const vsearch<T> n) const {
-            return *(this->entry) < *(n.get());
+            return *_v < *(n._v);
         }
+
     private:
-        vsearch_entry<T> *entry;
+        vsearch_entry<T> *_v;
 };
+
+// No native templated typedefs.
+#ifndef SearchQueue 
+#define SearchQueue std::priority_queue<vsearch<VState*> >
+#endif
 
 class HMM {
     public:
@@ -67,12 +92,16 @@ class Behavior {
     public:
         Behavior(){};
         Behavior(const Behavior<T>&); //intentionally undefined to avoid object-slicing.
-        virtual ~Behavior(){};
+        ~Behavior(){};
         virtual T emit(double, int = 0){ return (T) -1; }
-        virtual double loglikelihood(T, int=INT_MIN){ return 1.0; }
-        static double LogLikelihood(bool, double=DBL_EPSILON, int=INT_MIN);
+        virtual logdouble loglikelihood(T, int=INT_MIN){ 
+          logdouble r; 
+          r.v = 1.0;
+          return r;
+        }
+        static logdouble loglikelihood(bool, double=DBL_EPSILON, int=INT_MIN);
         virtual void relabelTransition(std::vector<T>&){ return; };
-        virtual void enqueueBehavior(std::list<vsearch_entry<T>*>&, std::priority_queue<vsearch_entry<T>* >&, vsearch_entry<T>*, bool=true, bool=false, bool=false) = 0;
+        virtual void enqueueBehavior(std::priority_queue<vsearch<T> >&, vsearch<T>, bool=true, bool=false, bool=false) = 0;
 };
 
 // MonoBehavior
@@ -84,14 +113,14 @@ class MonoBehavior : public Behavior<T> {
         MonoBehavior(T, double);
         ~MonoBehavior();
         virtual T emit(double, int = 0);
-        virtual double loglikelihood(T, int=INT_MIN);
+        virtual logdouble loglikelihood(T, int=INT_MIN);
         void relabelTransition(std::vector<T>&);
-        void enqueueBehavior(std::list<vsearch_entry<T>*>&, std::priority_queue<vsearch_entry<T>* >&, vsearch_entry<T>*, bool=true,bool=false,bool=false);
+        void enqueueBehavior(std::priority_queue<vsearch<T> >&, vsearch<T>, bool=true,bool=false,bool=false);
     private:
         T _emission;
         double _prob;
-        double _likelihood;
-        double _notlikelihood;
+        logdouble _likelihood;
+        logdouble _notlikelihood;
 };
 
 // PolyBehavior
@@ -100,14 +129,13 @@ template <class T>
 class PolyBehavior : public Behavior<T> {
     public:
         PolyBehavior(TiXmlElement*);
-        ~PolyBehavior();
         virtual T emit(double, int = 0);
-        virtual double loglikelihood(T, int=INT_MIN);
+        virtual logdouble loglikelihood(T, int=INT_MIN);
         void relabelTransition(std::vector<T>&);
-        void enqueueBehavior(std::list<vsearch_entry<T>*>&, std::priority_queue<vsearch_entry<T>* >&, vsearch_entry<T>*, bool=true, bool=false, bool=false);
+        void enqueueBehavior(std::priority_queue<vsearch<T> >&, vsearch<T>, bool=true, bool=false, bool=false);
    private:
         std::map<double, T> _emissions; 
-        std::map<T, double> _likelihoods;
+        std::map<T, logdouble> _likelihoods;
         double _density;
 };
 
@@ -119,29 +147,28 @@ class IndexedBehavior : public Behavior<T> {
         IndexedBehavior(std::vector<T>, double = 0.0);
         ~IndexedBehavior();
         virtual T emit(double, int = 0);
-        virtual double loglikelihood(T, int, int=0);
+        virtual logdouble loglikelihood(T, int, int=0);
         int size(){ return _emissions.size(); }
-        void enqueueBehavior(std::list<vsearch_entry<T>*>&, std::priority_queue<vsearch_entry<T>* >&, vsearch_entry<T>*, bool = false, bool = true, bool = false);
+        void enqueueBehavior(std::priority_queue<vsearch<T> >&, vsearch<T>, bool = false, bool = true, bool = false);
     private:
         std::vector<T> _emissions;
         double _prob;
-        double _likelihood;
-        double _notlikelihood;
+        logdouble _likelihood;
+        logdouble _notlikelihood;
 };
 
 class VState {
     friend class HMM;
     public:
-        virtual ~VState(){};
         virtual char emit(double, int=0) = 0;
         virtual VState* transition(double, int&) = 0;
         virtual bool hasTransition() = 0;
         virtual bool hasEmission() = 0;
         int getId(){ return _id; };
         std::string getLabel(){ return _label; }
-        virtual void enqueueTransitions(std::list<vsearch_entry<VState*>*>&, std::priority_queue<vsearch_entry<VState*>* >&, vsearch_entry<VState*>*) = 0;
-        virtual double emissionProbability(char, int = 0, int=INT_MIN) = 0;
-        virtual double transitionProbability(VState*,int = 0) = 0;
+        virtual void enqueueTransitions(SearchQueue&, vsearch_entry<VState*>*) = 0;
+        virtual logdouble emissionProbability(char, int = 0, int=INT_MIN) = 0;
+        virtual logdouble transitionProbability(VState*,int = 0) = 0;
         virtual bool incrementing() = 0;
         virtual bool resetting() = 0;
     protected:
@@ -162,9 +189,9 @@ class State : public VState {
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
         char emit(double, int=0);
-        double emissionProbability(char, int=0, int=INT_MIN);
-        double transitionProbability(VState*, int = 0);
-        virtual void enqueueTransitions(std::list<vsearch_entry<VState*>* >&, std::priority_queue<vsearch_entry<VState*>* >&, vsearch_entry<VState*>* );
+        logdouble emissionProbability(char, int=0, int=INT_MIN);
+        logdouble transitionProbability(VState*, int = 0);
+        virtual void enqueueTransitions(SearchQueue&, vsearch_entry<VState*>* );
         bool incrementing(){ return _positionIncrement; }
         bool resetting(){ return _positionReset; }
     protected:
@@ -185,9 +212,9 @@ class IndexedState : public VState {
         virtual bool hasEmission(){ return true; }
         virtual bool hasTransition(){ return true; }
         char emit(double, int);
-        virtual void enqueueTransitions(std::list<vsearch_entry<VState*>*>&, std::priority_queue<vsearch_entry<VState*>* >&, vsearch_entry<VState*>*);
-        double emissionProbability(char, int=0, int=INT_MIN);
-        double transitionProbability(VState*, int = 0);
+        virtual void enqueueTransitions(SearchQueue&, vsearch_entry<VState*>*);
+        logdouble emissionProbability(char, int=0, int=INT_MIN);
+        logdouble transitionProbability(VState*, int = 0);
         bool incrementing(){ return true; }
         bool resetting(){ return false; }
 
@@ -214,5 +241,5 @@ class AcceptingState : public SilentState {
         AcceptingState(TiXmlElement*);
         ~AcceptingState(){};
         bool hasTransition(){ return false; }
-        void enqueueTransitions(std::list<vsearch_entry<VState*>*>&, std::priority_queue<vsearch_entry<VState*>* >&, vsearch_entry<VState*>* ){ return; }
+        void enqueueTransitions(SearchQueue&, vsearch_entry<VState*>* ){ return; }
 };
