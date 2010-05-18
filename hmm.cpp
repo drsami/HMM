@@ -119,7 +119,7 @@ void HMM::viterbi(char *seq, char *qual){
             searchedNodes.insert(ndid);
         }
 
-        printf("<%d, %d, %d>: %e [%c]\n", node->state->getId(), node->emission, node->position, node->loglikelihood.v, seq[node->emission]);
+        //printf("<%d, %d, %d>: %e [%c]\n", node->state->getId(), node->emission, node->position, node->loglikelihood.v, seq[node->emission]);
 
         list<string> labels;
 
@@ -149,10 +149,12 @@ void HMM::viterbi(char *seq, char *qual){
         logdouble ep;
         ep.v = 0.0;
 
-        if( qual ){
-            ep = node->state->emissionProbability(seq[node->emission], node->position, qual[node->emission]);
-        } else {
-            ep = node->state->emissionProbability(seq[node->emission], node->position);
+        if( node->state->hasEmission() ){
+            if( qual ){
+                ep = node->state->emissionProbability(seq[node->emission], node->position, qual[node->emission]);
+            } else {
+                ep = node->state->emissionProbability(seq[node->emission], node->position);
+            }
         }
 
         if( node->state->incrementing() ){
@@ -422,7 +424,7 @@ void MonoBehavior<T>::enqueueBehavior(priority_queue<vsearch<T> > &searchQueue, 
         newBehavior->emission = entry->emission + 1;
     }
 
-    printf("Adding a transition to node %d with position %d and emission %d\n", ((VState*) _emission)->getId(), newBehavior->position, newBehavior->emission);
+    //printf("Adding a transition to node %d with position %d and emission %d\n", ((VState*) _emission)->getId(), newBehavior->position, newBehavior->emission);
     vsearch<T> e(newBehavior);
     searchQueue.push(e);
 }
