@@ -3,10 +3,30 @@
 using namespace boost;
 using namespace std;
 
+// Insert a sequence into the multiple sequence alignment
 int MultipleSequenceAlgn::addSequence(kseq_t *kseq){
     Sequence seq(kseq);
     _sequences.push_back(seq);
     return _sequences.size();
+}
+
+dynamic_bitset<> MultipleSequenceAlgn::getGaps(){
+    dynamic_bitset<> mask;
+    if( _sequences.size() ){
+        mask = _sequences[0].getMask();
+
+        vector<Sequence>::iterator s_itr = _sequences.begin() + 1;
+        for( ; s_itr != _sequences.end(); s_itr++ ){
+            mask &= s_itr->getMask();
+        }
+    }
+
+    for(int ii = 0; ii < (int) mask.size(); ii++){
+        printf("%d", (mask[ii] ? 1 : 0));
+    }
+    printf("\n");
+    return mask;
+
 }
 
 vector<int> MultipleSequenceAlgn::getMinimalEncoding(){
@@ -130,7 +150,7 @@ dynamic_bitset<> Sequence::encode(vector<int> encoding){
 
   return enc;
 }
-
+/*
 int main(int argc, char *argv[])
 {
 
@@ -153,14 +173,26 @@ int main(int argc, char *argv[])
   }
 
   vector<int> encoding = m.getMinimalEncoding();
+  dynamic_bitset<> consensus = m.consensusWithEncoding(encoding);
+  consensus &= m.getGaps();
   vector<int>::iterator e_itr;
   for(e_itr = encoding.begin(); e_itr != encoding.end(); e_itr++){
     printf("%d\t", *e_itr);
   }
-  
+  printf("\n");
+
+  for( int ii = 0; ii < (int) consensus.size(); ii++ ){
+    printf("%d", (consensus[ii] ? 0 : 1));
+  }
+
+  printf("\n");
+
+  printf("%d\t%d\n", consensus.count(), consensus.size());
+
+  //m.getGaps();
 
   vector<kseq_t*>::iterator s_itr;
-/*
+
   for( s_itr = sequences.begin(); s_itr != sequences.end(); s_itr++ ){
     seq = *s_itr;
     printf("name: %s\n", seq->name.s);
@@ -168,8 +200,10 @@ int main(int argc, char *argv[])
     printf("seq: %s\n", seq->seq.s);
     if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
   }
-*/
+
   kseq_destroy(seq);
   gzclose(fp);
   return 0;
 }
+
+*/

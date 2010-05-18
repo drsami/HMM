@@ -18,11 +18,12 @@ class MultipleSequenceAlgn {
       ~MultipleSequenceAlgn(){};
       int addSequence(kseq_t* s);
       std::vector<int> getMinimalEncoding();
+      boost::dynamic_bitset<> getGaps();
+      boost::dynamic_bitset<> consensusWithEncoding(std::vector<int> encoding);
     private:
       
       //Member functions
       std::vector<Sequence> _sequences;
-      boost::dynamic_bitset<> consensusWithEncoding(std::vector<int> encoding);
       
       //Member variables
       int _length;
