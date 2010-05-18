@@ -31,9 +31,8 @@
   (cons (+ id 1)
   (cons `(State ((id ,(number->string id))
            (type "indexed")
-           (label ,label)
-           (prob "0.999"))
-          (emissions ((str ,str)))
+           (label ,label))
+          (emissions ((prob "0.999") (str ,str)))
           (internalTransition ((prob "1.0") (monomorphic ,(number->string id))))
           (terminalTransition ((prob "1.0") (monomorphic ,(number->string terminal))))) '())))
 
