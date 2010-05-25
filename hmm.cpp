@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <stdio.h> 
 #include <stdlib.h>
 #include "hmm.h"
 
@@ -582,6 +582,7 @@ AcceptingState::AcceptingState(TiXmlElement *e) : SilentState(e) {
 // SilentState
 SilentState::SilentState(TiXmlElement *e) : State(e) {
 }
+
 
 int main(int argc, char* argv[]){
 
