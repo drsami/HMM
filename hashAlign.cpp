@@ -7,10 +7,10 @@ using namespace std;
 
 // Insert a sequence into the multiple sequence alignment
 int MultipleSequenceAlgn::insert(kseq_t *kseq){
-    Sequence seq(kseq);
-    _sequences.push_back(seq);
-    _gaps.clear(); // reset the gaps;
-    return _sequences.size();
+  Sequence seq(kseq);
+  _sequences.push_back(seq);
+  _gaps.clear(); // reset the gaps;
+  return _sequences.size();
 }
 
 bool MultipleSequenceAlgn::remove(string seq){
@@ -19,9 +19,9 @@ bool MultipleSequenceAlgn::remove(string seq){
 
   for(s_itr = _sequences.begin(); s_itr != _sequences.end(); s_itr++){
     if( s_itr->getName() == seq ){
-        _sequences.erase(s_itr);
-        _gaps.clear();
-        return true;
+      _sequences.erase(s_itr);
+      _gaps.clear();
+      return true;
     }
   }
 
@@ -29,70 +29,70 @@ bool MultipleSequenceAlgn::remove(string seq){
 }
 
 dynamic_bitset<> MultipleSequenceAlgn::getGaps(){
-    if( _gaps.size() > 0){
-        return _gaps;
-    }
+  if( _gaps.size() > 0){
+    return _gaps;
+  }
 
-    dynamic_bitset<> mask;
-    if( _sequences.size() ){
-        mask = _sequences[0].getMask();
+  dynamic_bitset<> mask;
+  if( _sequences.size() ){
+    mask = _sequences[0].getMask();
 
-        vector<Sequence>::iterator s_itr = _sequences.begin() + 1;
-        for( ; s_itr != _sequences.end(); s_itr++ ){
-            mask &= s_itr->getMask();
-        }
+    vector<Sequence>::iterator s_itr = _sequences.begin() + 1;
+    for( ; s_itr != _sequences.end(); s_itr++ ){
+      mask &= s_itr->getMask();
     }
-    
-    _gaps = mask;
-    return mask;
+  }
+
+  _gaps = mask;
+  return mask;
 
 }
 
 list<Hash> MultipleSequenceAlgn::makeHashes(vector<int> encoding){
-    
-    unsigned int hash_size = 64;
-    
 
-    list<Hash> hashes;
+  unsigned int hash_size = 24;
 
-    dynamic_bitset<> sequence = _sequences[0].encode(encoding);
-    dynamic_bitset<> gaps = getGaps();
-    dynamic_bitset<> mask = consensusWithEncoding(encoding);
-    unsigned int len = gaps.size();
 
-    cout << mask << endl;
+  list<Hash> hashes;
 
-    assert(gaps.size() == sequence.size());
-    assert(gaps.size() == mask.size());
-    
-    dynamic_bitset<> gapFrame(hash_size);
-    dynamic_bitset<> maskFrame(hash_size);
-    dynamic_bitset<> seqFrame(hash_size);
-    if( gaps.size() < hash_size ){
-      //TODO throw an exception?
-        return hashes;
-    }
+  dynamic_bitset<> sequence = _sequences[0].encode(encoding);
+  dynamic_bitset<> gaps = getGaps();
+  dynamic_bitset<> mask = consensusWithEncoding(encoding);
+  unsigned int len = gaps.size();
 
-    for(unsigned int ii = 0; ii < len; ii++){
-      gapFrame     <<= 1;
-      gapFrame[0]  =   gaps[len - 1 - ii];
-      maskFrame    <<= 1;
-      maskFrame[0] =   mask[len - 1 - ii];
-      seqFrame     <<= 1;
-      seqFrame[0]  =   sequence[len - 1 - ii];
-    
-      // Ensure that we've buffered, that we aren't spanning a gap
-      // and that the high order bit is set
-      if( ii >= hash_size && !(ii % 2) && (~gapFrame).none() && maskFrame[hash_size - 1] ){
-        if( maskFrame.count() >= 10 ){
-            Hash h(maskFrame, maskFrame & seqFrame, encoding);
-            cout << ii - hash_size << ":\t" << maskFrame.count() << "\t" << maskFrame << endl;
-            hashes.push_back(h);
-        }
+  cout << mask << endl;
+
+  assert(gaps.size() == sequence.size());
+  assert(gaps.size() == mask.size());
+
+  dynamic_bitset<> gapFrame(hash_size);
+  dynamic_bitset<> maskFrame(hash_size);
+  dynamic_bitset<> seqFrame(hash_size);
+  if( gaps.size() < hash_size ){
+    //TODO throw an exception?
+    return hashes;
+  }
+
+  for(unsigned int ii = 0; ii < len; ii++){
+    gapFrame     <<= 1;
+    gapFrame[0]  =   gaps[len - 1 - ii];
+    maskFrame    <<= 1;
+    maskFrame[0] =   mask[len - 1 - ii];
+    seqFrame     <<= 1;
+    seqFrame[0]  =   sequence[len - 1 - ii];
+
+    // Ensure that we've buffered, that we aren't spanning a gap
+    // and that the high order bit is set
+    if( ii >= hash_size && (~gapFrame).none() && maskFrame[hash_size - 1] ){
+      if( maskFrame.count() >= 6 ){
+        Hash h(maskFrame, maskFrame & seqFrame, encoding);
+        cout << ii - hash_size << ":\t" << maskFrame.count() << "\t" << maskFrame << endl;
+        hashes.push_back(h);
       }
     }
+  }
 
-    return hashes;
+  return hashes;
 }
 
 vector<int> MultipleSequenceAlgn::getMinimalEncoding(){
@@ -142,16 +142,16 @@ dynamic_bitset<> MultipleSequenceAlgn::consensusWithEncoding(vector<int> encodin
 
 std::set<Reference> MultipleSequenceAlgn::getReferences(){
 
-   vector<int> encoding = getMinimalEncoding();
-   list<Hash> hashes = makeHashes(encoding);
-   set<Reference> refs;
-   vector<Sequence>::iterator s_itr;
+  vector<int> encoding = getMinimalEncoding();
+  list<Hash> hashes = makeHashes(encoding);
+  set<Reference> refs;
+  vector<Sequence>::iterator s_itr;
 
-   for( s_itr = _sequences.begin(); s_itr != _sequences.end(); s_itr++){
-     refs.insert(Reference(*s_itr, hashes));
-   }
+  for( s_itr = _sequences.begin(); s_itr != _sequences.end(); s_itr++){
+    refs.insert(Reference(*s_itr, hashes));
+  }
 
-   return refs;
+  return refs;
 }
 
 Sequence::Sequence(kseq_t* kseq){
@@ -168,7 +168,7 @@ Sequence::Sequence(kseq_t* kseq){
   } else {
     _comment = "";
   }
-  
+
   if((len = kseq->seq.l)){
     _seq = string(kseq->seq.s, len);
   } else {
@@ -185,48 +185,48 @@ Sequence::Sequence(kseq_t* kseq){
   string::iterator s_itr;
   for( s_itr = _seq.begin(); s_itr != _seq.end(); s_itr++ ){
     if( isNucleotide(*s_itr) ){
-        _mask.push_back( true );  _mask.push_back( true );
+      _mask.push_back( true );  _mask.push_back( true );
     } else {
-        _mask.push_back( false ); _mask.push_back( false );
+      _mask.push_back( false ); _mask.push_back( false );
     }
   }
 }
 
 bool Sequence::operator<(const Sequence rhs) const {
-    return _name < rhs._name;
+  return _name < rhs._name;
 }
 
 bool Sequence::isNucleotide(char n){
   switch(n){
-      case 'A':
-      case 'a':
-      case 'T':
-      case 't':
-      case 'C':
-      case 'c':
-      case 'G':
-      case 'g': return true;
-      default: return false;
+    case 'A':
+    case 'a':
+    case 'T':
+    case 't':
+    case 'C':
+    case 'c':
+    case 'G':
+    case 'g': return true;
+    default: return false;
   }
 }
 
 Sequence Sequence::ungapped(){
 
-    Sequence ugs;
-    ugs._name = _name;
-    ugs._comment = _comment;
-    ugs._mask = dynamic_bitset<>();
-    ugs._gapped = -1;
-    for( unsigned int ii = 0 ; ii < _mask.size() ; ++ii ){
-        if( _mask[ii] ){
-            ugs._seq.push_back(_seq[ii]);
-            ugs._qual.push_back(_qual[ii]);
-        }
+  Sequence ugs;
+  ugs._name = _name;
+  ugs._comment = _comment;
+  ugs._mask = dynamic_bitset<>();
+  ugs._gapped = -1;
+  for( unsigned int ii = 0 ; ii < _mask.size() ; ++ii ){
+    if( _mask[ii] ){
+      ugs._seq.push_back(_seq[ii]);
+      ugs._qual.push_back(_qual[ii]);
     }
-    
-    ugs._mask.resize(ugs._seq.size(), true);
-    
-    return ugs;
+  }
+
+  ugs._mask.resize(ugs._seq.size(), true);
+
+  return ugs;
 
 }
 
@@ -264,149 +264,237 @@ dynamic_bitset<> Sequence::encode(vector<int> encoding){
 }
 
 bool Sequence::isGapped(){ 
-    if( _gapped < 0 ){
-        _gapped = (~_mask.any() ? 1 : 0);
-    }
+  if( _gapped < 0 ){
+    _gapped = (~_mask.any() ? 1 : 0);
+  }
 
-    return _gapped;
+  return _gapped;
 }
 
 Reference::Reference(Sequence seq, list<Hash> hashes){
-    _ref = seq;
+  _ref = seq;
 
-    list<Hash>::iterator h_itr;
+  list<Hash>::iterator h_itr;
 
-    for( h_itr = hashes.begin(); h_itr != hashes.end(); h_itr++ ){
-        set<int> m = h_itr->matches(_ref);
-        if(m.size() == 1){
-           _positions.insert(pair<Hash, int>(*h_itr, *(m.begin())));
-        }
+  for( h_itr = hashes.begin(); h_itr != hashes.end(); h_itr++ ){
+    set<int> m = h_itr->matches(_ref);
+    if(m.size() == 1){
+      _positions.insert(pair<Hash, int>(*h_itr, *(m.begin())));
     }
+  }
 }
 
 bool Reference::operator<(const Reference rhs) const {
-    return _ref < rhs._ref;
+  return _ref < rhs._ref;
 }
 
 void Reference::match(Sequence seq){
-//TODO this is going to be a whopper of a method...
 
+  
+  map<int,int> votes;
+  map<Hash, int>::iterator h_itr = _positions.begin();
+
+  // TODO If I'm assuming that the encoding is invariant why am I storing
+  //      it in each hash? I should look into promoting this up to Reference.
+  vector<int> encoding = (*h_itr).first.getEncoding();
+
+  dynamic_bitset<> encodedSeq = seq.encode(encoding);
+  dynamic_bitset<> voters(encodedSeq.size(), true);
+
+  set<hash_info> observations;
+
+  // Match all the hashes and get everything that uniquely matches
+  for(; h_itr != _positions.end(); h_itr++){
+    Hash h = (*h_itr).first;
+    set<int> m = h.matches(encodedSeq);
+    if( m.size() == 1 ){
+      int obs = *(m.begin());
+      hash_info hinf;
+      hinf.hash = h;
+      hinf.expected_position = (*h_itr).second;
+      hinf.observed_position = obs;
+      hinf.offset = obs - (*h_itr).second;
+      observations.insert(hinf);
+    }
+  }
+
+  // no unique observations.
+  if( !observations.size() ){
+
+  }
+
+  set<hash_info>::iterator obs_itr = observations.begin();
+ 
+  int leadPos = -1;
+  int currPos = -1;
+  int lagPos  = -1;
+
+  hash_info lead;
+  hash_info curr;
+  hash_info lag;
+
+  curr = (*obs_itr);
+  obs_itr++;
+  
+  // We only have one hash...
+  if( obs_itr == observations.end() ){
+
+  }
+  lag = (*obs_itr);
+  for(; obs_itr != observations.end(); obs_itr++){
+    
+    if( lead.hash.size() && lag.hash.size() ){
+
+        if( (curr.offset == lead.offset) &&
+            (curr.offset == lag.offset) ){
+            vote(voters, votes, curr);
+        }
+
+    }
+
+
+
+  }
+
+}
+
+void Reference::vote(dynamic_bitset<> &voters, map<int, int> &votes, hash_info &hinf){
+
+  int offset = hinf.offset;
+
+  // Shift the mask against the reference
+  unsigned int shift = voters.size() - hinf.hash.size() - hinf.expected_position;
+  dynamic_bitset<> m = hinf.hash.getMask();
+  m <<= shift;
+
+  // Get the numbers of votes
+  int v = (m - voters).count();
+
+  map<int, int>::iterator pos = votes.find(offset);
+  if( pos != votes.end() ){
+     v = pos->second + v;
+  } 
+
+  // Contribute the votes   
+  votes[offset] = v;
+  // Null the voting bits
+  voters -= m;
 
 }
 
 Hash::Hash(dynamic_bitset<> mask, dynamic_bitset<> val, vector<int> encoding){
-    _value = val;
-    _mask = mask;
-    _encoding = encoding;
+  _value = val;
+  _mask = mask;
+  _size = mask.size();
+  _encoding = encoding;
 }
 
 bool Hash::operator<(const Hash rhs) const {
-    return _value < rhs._value;
+  return _value < rhs._value;
 }
 
 bool Hash::operator>(const Hash rhs) const {
-    return _value > rhs._value;
+  return _value > rhs._value;
 }
 
 set<int> Hash::matches(dynamic_bitset<> encoded){
-    //TODO It might make more sense to iterate over the sequence once
-    // trying all the hashes as we go. First get it working, then get
-    // it right.
+  //TODO It might make more sense to iterate over the sequence once
+  // trying all the hashes as we go. First get it working, then get
+  // it right.
 
-    set<int> res;
-    dynamic_bitset<> buffer;
-    
-    //fill the buffer
-    for(unsigned int ii = 0; ii < _mask.size(); ii++){
-        buffer.push_back(encoded[ii]);
+  set<int> res;
+  dynamic_bitset<> buffer;
+
+  //fill the buffer
+  for(unsigned int ii = 0; ii < _mask.size(); ii++){
+    buffer.push_back(encoded[ii]);
+  }
+
+  // march over the sequence and find hits
+  unsigned int index = 0;
+  do{
+    if( match(buffer) ){
+      res.insert(index);
     }
+  }while( index++ < encoded.size() - _mask.size() );
 
-    // march over the sequence and find hits
-    unsigned int index = 0;
-    do{
-        if( match(buffer) ){
-            res.insert(index);
-        }
-    }while( index++ < encoded.size() - _mask.size() );
-    
-    // and return the set
-    return res;
+  // and return the set
+  return res;
 }
 
 
 set<int> Hash::matches(Sequence seq){
-    
+
   dynamic_bitset<> encoded;
   if( seq.isGapped() ){
     encoded = seq.ungapped().encode(_encoding);   
   } else {
     encoded = seq.encode(_encoding);
   }
-  
+
   return matches(encoded);
 
 }
 
 bool Hash::match(dynamic_bitset<> t){
-    return (_value == (t & _mask));
+  return (_value == (t & _mask));
 }
 
-/*
-int main(int argc, char *argv[])
-{
 
-  MultipleSequenceAlgn m;
+   int main(int argc, char *argv[])
+   {
 
-  vector<kseq_t*> sequences;
-  gzFile fp;
-  kseq_t *seq;
-  int l;
-  if (argc == 1) {
-    fprintf(stderr, "Usage: %s <in.seq>\n", argv[0]);
-    return 1;
-  }
-  fp = gzopen(argv[1], "r");
-  seq = kseq_init(fp);
-  while ((l = kseq_read(seq)) >= 0) {
-    sequences.push_back(seq);
-    m.insert(seq);
-  }
+   MultipleSequenceAlgn m;
 
-  vector<int> encoding = m.getMinimalEncoding();
-  dynamic_bitset<> consensus = m.consensusWithEncoding(encoding);
+   vector<kseq_t*> sequences;
+   gzFile fp;
+   kseq_t *seq;
+   int l;
+   if (argc == 1) {
+   fprintf(stderr, "Usage: %s <in.seq>\n", argv[0]);
+   return 1;
+   }
+   fp = gzopen(argv[1], "r");
+   seq = kseq_init(fp);
+   while ((l = kseq_read(seq)) >= 0) {
+   sequences.push_back(seq);
+   m.insert(seq);
+   }
 
-  dynamic_bitset<> gaps = m.getGaps();
+   vector<int> encoding = m.getMinimalEncoding();
+   dynamic_bitset<> consensus = m.consensusWithEncoding(encoding);
 
-  printf("Gaps:\n");
-  for(int ii = 0; ii < (int) gaps.size(); ii++){
-    printf("%d", (gaps[ii] ? 1 : 0));
-  }
-  printf("\n");
+   dynamic_bitset<> gaps = m.getGaps();
 
-  consensus &= gaps;
-  vector<int>::iterator e_itr;
-  for(e_itr = encoding.begin(); e_itr != encoding.end(); e_itr++){
-    printf("%d\t", *e_itr);
-  }
-  printf("\n");
+   printf("Gaps:\n");
+   for(int ii = 0; ii < (int) gaps.size(); ii++){
+   printf("%d", (gaps[ii] ? 1 : 0));
+   }
+   printf("\n");
 
-  for( int ii = 0; ii < (int) consensus.size(); ii++ ){
-    printf("%d", (consensus[ii] ? 1 : 0));
-  }
+   consensus &= gaps;
+   vector<int>::iterator e_itr;
+   for(e_itr = encoding.begin(); e_itr != encoding.end(); e_itr++){
+   printf("%d\t", *e_itr);
+   }
+   printf("\n");
 
-  printf("\n");
+   for( int ii = 0; ii < (int) consensus.size(); ii++ ){
+   printf("%d", (consensus[ii] ? 1 : 0));
+   }
 
-  printf("%d\t%d\n", consensus.count(), consensus.size());
+   printf("\n");
 
-  list<dynamic_bitset<> >::iterator itvl_itr;
+   printf("%d\t%d\n", consensus.count(), consensus.size());
 
-  list<Hash> hashes = m.makeHashes(encoding);
-  
-  printf("Got %d hashes\n", hashes.size());
+   list<dynamic_bitset<> >::iterator itvl_itr;
 
-  kseq_destroy(seq);
-  gzclose(fp);
-  return 0;
-}
+   list<Hash> hashes = m.makeHashes(encoding);
 
-*/
+   printf("Got %d hashes\n", hashes.size());
+
+   kseq_destroy(seq);
+   gzclose(fp);
+   return 0;
+   }
+

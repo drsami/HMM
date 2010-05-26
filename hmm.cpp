@@ -583,7 +583,7 @@ AcceptingState::AcceptingState(TiXmlElement *e) : SilentState(e) {
 SilentState::SilentState(TiXmlElement *e) : State(e) {
 }
 
-
+/*
 int main(int argc, char* argv[]){
 
     if( argc == 1 ){
@@ -602,3 +602,5 @@ int main(int argc, char* argv[]){
     free(n);
     return 0;
 }
+
+*/
