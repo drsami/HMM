@@ -18,6 +18,7 @@ KSEQ_INIT(gzFile, gzread);
 class Sequence;
 class Hash;
 class Reference;
+class ReferenceSet;
 
 class MultipleSequenceAlgn { 
   public:
@@ -29,7 +30,7 @@ class MultipleSequenceAlgn {
     boost::dynamic_bitset<> getGaps();
     std::list<Hash> makeHashes(std::vector<int>);
     boost::dynamic_bitset<> consensusWithEncoding(std::vector<int> encoding);
-    std::set<Reference> getReferences();
+    ReferenceSet getReferences();
   private:
 
     //Member functions
@@ -64,6 +65,7 @@ class Hash {
 class Sequence {
   public:
     Sequence(kseq_t*);
+    Sequence(std::string);
     Sequence(){};
     ~Sequence(){};
     Sequence ungapped();
@@ -94,13 +96,24 @@ bool operator<(const hash_info lhs, const hash_info rhs) {
 }
 
 
+class ReferenceSet {
+    public:
+      ReferenceSet();
+      ReferenceSet(std::vector<int> enc, std::set<Hash> h){ _encoding = enc; _hashes = std::vector<Hash>(h.begin(), h.end()); }
+      void insert(Reference r);
+      void match(Sequence);
+    private:
+      std::vector<int> _encoding;
+      std::set<Reference> _references;
+      std::vector<Hash> _hashes;
+};
+
 class Reference {
   public:
-    Reference(Sequence, std::list<Hash>);
-    void match(Sequence);
+    Reference(Sequence, std::list<Hash>, std::vector<int>);
     bool operator<(const Reference) const;
   private:
-    void vote(boost::dynamic_bitset<> &voters, std::map<int, int> &votes, hash_info&);
     Sequence _ref;
+    boost::dynamic_bitset<> _refbits;
     std::map<Hash, int> _positions;
 };

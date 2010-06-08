@@ -7,7 +7,7 @@
 #****************************************************************************
 
 # DEBUG can be set to YES to include debugging info, or NO otherwise
-DEBUG          := NO
+DEBUG          := YES
 
 # PROFILE can be set to YES to include profiling info, or NO otherwise
 PROFILE        := NO
@@ -89,7 +89,7 @@ all: ${OUTPUT}
 # Source files
 #****************************************************************************
 
-SRCS := hmm.cpp hashAlign.cpp tinyxml.cpp tinyxmlparser.cpp tinyxmlerror.cpp tinystr.cpp
+SRCS := hmm.cpp hasher.cpp tinyxml.cpp tinyxmlparser.cpp tinyxmlerror.cpp tinystr.cpp
 
 # Add on the sources for libraries
 SRCS := ${SRCS}
